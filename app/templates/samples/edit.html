@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ sample.lab_number }} - DGC SMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2><i class="bi bi-pencil"></i> Edit Sample: {{ sample.lab_number }}</h2>
+    <a href="{{ url_for('samples.detail', sample_id=sample.id) }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-9">
+        <div class="card">
+            <div class="card-body p-4">
+                <form method="POST" enctype="multipart/form-data">
+                    {{ form.hidden_tag() }}
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            {{ form.lab_number.label(class="form-label fw-semibold") }}
+                            {{ form.lab_number(class="form-control") }}
+                            {% for error in form.lab_number.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        <div class="col-md-6">
+                            {{ form.sample_name.label(class="form-label fw-semibold") }}
+                            {{ form.sample_name(class="form-control") }}
+                            {% for error in form.sample_name.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        <div class="col-md-6">
+                            {{ form.sample_type.label(class="form-label fw-semibold") }}
+                            {{ form.sample_type(class="form-select") }}
+                            {% for error in form.sample_type.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-12">
+                            {{ form.description.label(class="form-label fw-semibold") }}
+                            {{ form.description(class="form-control", rows=3) }}
+                        </div>
+
+                        <div class="col-md-4">
+                            {{ form.quantity.label(class="form-label fw-semibold") }}
+                            {{ form.quantity(class="form-control") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.volume.label(class="form-label fw-semibold") }}
+                            {{ form.volume(class="form-control") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.parish.label(class="form-label fw-semibold") }}
+                            {{ form.parish(class="form-control") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.patient_name.label(class="form-label fw-semibold") }}
+                            {{ form.patient_name(class="form-control") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.source.label(class="form-label fw-semibold") }}
+                            {{ form.source(class="form-control") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.formulation_type.label(class="form-label fw-semibold") }}
+                            {{ form.formulation_type(class="form-control") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.manufacturer.label(class="form-label fw-semibold") }}
+                            {{ form.manufacturer(class="form-control") }}
+                        </div>
+                        <div class="col-md-8">
+                            {{ form.active_ingredient.label(class="form-label fw-semibold") }}
+                            {{ form.active_ingredient(class="form-select", size="6") }}
+                            <div class="form-text">Hold <kbd>Ctrl</kbd> (or <kbd>⌘ Cmd</kbd> on Mac) to select multiple APIs.</div>
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.api.label(class="form-label fw-semibold") }}
+                            {{ form.api(class="form-control") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.alcohol_type.label(class="form-label fw-semibold") }}
+                            {{ form.alcohol_type(class="form-select") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.claim_butt_number.label(class="form-label fw-semibold") }}
+                            {{ form.claim_butt_number(class="form-control") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.batch_lot_number.label(class="form-label fw-semibold") }}
+                            {{ form.batch_lot_number(class="form-control") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.milk_type.label(class="form-label fw-semibold") }}
+                            {{ form.milk_type(class="form-select") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.lot_number.label(class="form-label fw-semibold") }}
+                            {{ form.lot_number(class="form-control") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.expiration_date.label(class="form-label fw-semibold") }}
+                            {{ form.expiration_date(class="form-control", type="date") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.toxicology_sample_type_name.label(class="form-label fw-semibold") }}
+                            {{ form.toxicology_sample_type_name(class="form-select") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.patient_gender.label(class="form-label fw-semibold") }}
+                            {{ form.patient_gender(class="form-select") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.doctors_name.label(class="form-label fw-semibold") }}
+                            {{ form.doctors_name(class="form-control") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.registration_docket_no.label(class="form-label fw-semibold") }}
+                            {{ form.registration_docket_no(class="form-control") }}
+                        </div>
+                        <div class="col-md-4">
+                            {{ form.ward_clinic.label(class="form-label fw-semibold") }}
+                            {{ form.ward_clinic(class="form-control") }}
+                        </div>
+                        <div class="col-md-8">
+                            {{ form.test_requested.label(class="form-label fw-semibold") }}
+                            {{ form.test_requested(class="form-control") }}
+                        </div>
+                        <div class="col-12">
+                            {{ form.diagnosis_indicated.label(class="form-label fw-semibold") }}
+                            {{ form.diagnosis_indicated(class="form-control", rows=2) }}
+                        </div>
+
+                        <div class="col-md-6">
+                            {{ form.expected_report_date.label(class="form-label fw-semibold") }}
+                            {{ form.expected_report_date(class="form-control", type="date") }}
+                        </div>
+
+                        <div class="col-12">
+                            {{ form.scanned_file.label(class="form-label fw-semibold") }}
+                            {{ form.scanned_file(class="form-control") }}
+                            {% if sample.scanned_file %}
+                            <div class="form-text">
+                                Current file: <strong>{{ sample.scanned_file_original_name }}</strong>
+                                — uploading a new file will replace it.
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        {% if can_edit_accreditation %}
+                        <div class="col-md-6">
+                            {{ form.accreditation.label(class="form-label fw-semibold") }}
+                            {{ form.accreditation(class="form-select") }}
+                            <div class="form-text">
+                                <i class="bi bi-patch-check-fill text-success me-1"></i>Update the accreditation status of this sample.
+                            </div>
+                            {% for error in form.accreditation.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        <div class="col-12 d-flex gap-2 pt-2">
+                            {{ form.submit(class="btn btn-primary") }}
+                            <a href="{{ url_for('samples.detail', sample_id=sample.id) }}" class="btn btn-outline-secondary">Cancel</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

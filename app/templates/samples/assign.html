@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Assign Sample {{ sample.lab_number }} - DGC SMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2><i class="bi bi-person-plus"></i> Assign: {{ sample.lab_number }}</h2>
+    <a href="{{ url_for('samples.detail', sample_id=sample.id) }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card mb-3">
+            <div class="card-body py-2 px-3">
+                <span class="text-muted" style="font-size:.875rem;">
+                    {{ sample.sample_name }} &mdash;
+                    <span class="badge bg-info text-dark">{{ sample.sample_type.value }}</span>
+                </span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body p-4">
+                <form method="POST">
+                    {{ form.hidden_tag() }}
+
+                    <div class="row g-3">
+                        {% if has_predefined_tests %}
+                        <div class="col-12">
+                            {{ form.test_names.label(class="form-label fw-semibold") }}
+                            <select name="test_names" id="test_names" class="form-select" multiple size="6">
+                                {% for val, label in form.test_names.choices %}
+                                <option value="{{ val }}" {% if val in (form.test_names.data or []) %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Hold Ctrl/Cmd to select multiple tests</div>
+                            {% for error in form.test_names.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="col-12">
+                            {{ form.test_name.label(class="form-label fw-semibold") }}
+                            {{ form.test_name(class="form-control") }}
+                            {% for error in form.test_name.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        {% if has_predefined_refs %}
+                        <div class="col-md-6">
+                            {{ form.test_reference_select.label(class="form-label fw-semibold") }}
+                            <select name="test_reference_select" id="test_reference_select" class="form-select" multiple size="4">
+                                {% for val, label in form.test_reference_select.choices %}
+                                {% if val %}
+                                <option value="{{ val }}" {% if val in (form.test_reference_select.data or []) %}selected{% endif %}>{{ label }}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Hold Ctrl/Cmd to select multiple references</div>
+                        </div>
+                        {% else %}
+                        <div class="col-md-6">
+                            {{ form.test_reference.label(class="form-label fw-semibold") }}
+                            {{ form.test_reference(class="form-control") }}
+                        </div>
+                        {% endif %}
+
+                        <div class="col-md-6">
+                            {{ form.expected_completion.label(class="form-label fw-semibold") }}
+                            {{ form.expected_completion(class="form-control", type="date", id="expected_completion",
+                               **{"min": today}) }}
+                            {% for error in form.expected_completion.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-md-6">
+                            {{ form.quantity_volume.label(class="form-label fw-semibold") }}
+                            {{ form.quantity_volume(class="form-control") }}
+                        </div>
+
+                        <div class="col-12">
+                            {{ form.comments.label(class="form-label fw-semibold") }}
+                            {{ form.comments(class="form-control", rows=3) }}
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">{{ form.chemist_ids.label.text }}</label>
+                            {% for error in form.chemist_ids.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                            {{ form.chemist_ids() }}
+                        </div>
+
+                        <!-- OOS Investigation flag (Feature 4) -->
+                        <div class="col-12">
+                            <div class="form-check border rounded p-3 bg-warning-subtle">
+                                {{ form.oos_investigation(class="form-check-input", id="oos_investigation") }}
+                                <label class="form-check-label fw-semibold text-warning-emphasis" for="oos_investigation">
+                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                    {{ form.oos_investigation.label.text }}
+                                </label>
+                                <div class="form-text text-warning-emphasis">
+                                    Check this box if this assignment involves an Out of Specification investigation.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12 d-flex gap-2 pt-2">
+                            {{ form.submit(class="btn btn-primary") }}
+                            <a href="{{ url_for('samples.detail', sample_id=sample.id) }}" class="btn btn-outline-secondary">Cancel</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

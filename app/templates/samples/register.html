@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% block title %}Register Sample - DGC SMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2><i class="bi bi-plus-circle"></i> Register New Sample</h2>
+    <a href="{{ url_for('samples.sample_list') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-9">
+        <div class="card">
+            <div class="card-body p-4">
+                <form method="POST" enctype="multipart/form-data">
+                    {{ form.hidden_tag() }}
+
+                    <div class="row g-3">
+                        {# Laboratory (formerly Sample Type, always first, drives reload) #}
+                        <div class="col-md-4">
+                            {{ form.sample_type.label(class="form-label fw-semibold") }}
+                            {{ form.sample_type(class="form-select", id="sample_type_select") }}
+                            {% for error in form.sample_type.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        {# Lab Number – hidden / auto for pharma #}
+                        {% if form.lab_number %}
+                        <div class="col-md-4" id="lab_number_field">
+                            {{ form.lab_number.label(class="form-label fw-semibold") }}
+                            {{ form.lab_number(class="form-control") }}
+                            {% if is_pharma %}
+                            <div class="form-text text-info">Leave blank to auto-generate.</div>
+                            {% endif %}
+                            {% for error in form.lab_number.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        <div class="col-md-4">
+                            {{ form.sample_name.label(class="form-label fw-semibold") }}
+                            {{ form.sample_name(class="form-control") }}
+                            {% for error in form.sample_name.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        {# Toxicology Sample Type dropdown #}
+                        {% if form.toxicology_sample_type_name %}
+                        <div class="col-md-4" id="tox_sample_type_field">
+                            {{ form.toxicology_sample_type_name.label(class="form-label fw-semibold") }}
+                            {{ form.toxicology_sample_type_name(class="form-select") }}
+                            {% for error in form.toxicology_sample_type_name.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        <div class="col-12">
+                            {{ form.description.label(class="form-label fw-semibold") }}
+                            {{ form.description(class="form-control", rows=3) }}
+                        </div>
+
+                        {# Quantity (shown for Pharma & Alcohol) #}
+                        {% if form.quantity %}
+                        <div class="col-md-4" id="quantity_field">
+                            {{ form.quantity.label(class="form-label fw-semibold") }}
+                            {{ form.quantity(class="form-control") }}
+                        </div>
+                        {% endif %}
+
+                        {# Volume (shown for Toxicology & Milk) #}
+                        {% if form.volume %}
+                        <div class="col-md-4" id="volume_field">
+                            {{ form.volume.label(class="form-label fw-semibold") }}
+                            {{ form.volume(class="form-control") }}
+                        </div>
+                        {% endif %}
+
+                        {# Parish (only for base/non-specialized) #}
+                        {% if form.parish %}
+                        <div class="col-md-4" id="parish_field">
+                            {{ form.parish.label(class="form-label fw-semibold") }}
+                            {{ form.parish(class="form-control") }}
+                        </div>
+                        {% endif %}
+
+                        {# Source #}
+                        {% if form.source %}
+                        <div class="col-md-4" id="source_field">
+                            {{ form.source.label(class="form-label fw-semibold") }}
+                            {{ form.source(class="form-control") }}
+                        </div>
+                        {% endif %}
+
+                        {# Patient Name (Toxicology) #}
+                        {% if form.patient_name %}
+                        <div class="col-md-4" id="patient_name_field">
+                            {{ form.patient_name.label(class="form-label fw-semibold") }}
+                            {{ form.patient_name(class="form-control") }}
+                            <div class="form-text">Required for Toxicology samples</div>
+                        </div>
+                        {% endif %}
+
+                        {# Patient Gender (Toxicology) #}
+                        {% if form.patient_gender %}
+                        <div class="col-md-4" id="patient_gender_field">
+                            {{ form.patient_gender.label(class="form-label fw-semibold") }}
+                            {{ form.patient_gender(class="form-select") }}
+                        </div>
+                        {% endif %}
+
+                        {# Doctor's Name (Toxicology) #}
+                        {% if form.doctors_name %}
+                        <div class="col-md-4" id="doctors_name_field">
+                            {{ form.doctors_name.label(class="form-label fw-semibold") }}
+                            {{ form.doctors_name(class="form-control") }}
+                        </div>
+                        {% endif %}
+
+                        {# Registration/Docket No. (Toxicology) #}
+                        {% if form.registration_docket_no %}
+                        <div class="col-md-4" id="registration_docket_no_field">
+                            {{ form.registration_docket_no.label(class="form-label fw-semibold") }}
+                            {{ form.registration_docket_no(class="form-control") }}
+                        </div>
+                        {% endif %}
+
+                        {# Ward/Clinic (Toxicology) #}
+                        {% if form.ward_clinic %}
+                        <div class="col-md-4" id="ward_clinic_field">
+                            {{ form.ward_clinic.label(class="form-label fw-semibold") }}
+                            {{ form.ward_clinic(class="form-control") }}
+                        </div>
+                        {% endif %}
+
+                        {# Test Requested (Toxicology) #}
+                        {% if form.test_requested %}
+                        <div class="col-md-8" id="test_requested_field">
+                            {{ form.test_requested.label(class="form-label fw-semibold") }}
+                            {{ form.test_requested(class="form-control") }}
+                        </div>
+                        {% endif %}
+
+                        {# Diagnosis Indicated (Toxicology) #}
+                        {% if form.diagnosis_indicated %}
+                        <div class="col-12" id="diagnosis_indicated_field">
+                            {{ form.diagnosis_indicated.label(class="form-label fw-semibold") }}
+                            {{ form.diagnosis_indicated(class="form-control", rows=2) }}
+                        </div>
+                        {% endif %}
+
+                        {# Milk Type (Food Milk) #}
+                        {% if form.milk_type %}
+                        <div class="col-md-4" id="milk_type_field">
+                            {{ form.milk_type.label(class="form-label fw-semibold") }}
+                            {{ form.milk_type(class="form-select") }}
+                        </div>
+                        {% endif %}
+
+                        {# Formulation Type (Pharmaceutical) #}
+                        {% if form.formulation_type %}
+                        <div class="col-md-4" id="formulation_type_field">
+                            {{ form.formulation_type.label(class="form-label fw-semibold") }}
+                            {{ form.formulation_type(class="form-select") }}
+                        </div>
+                        {% endif %}
+
+                        {% if form.api %}
+                        <div class="col-md-4" id="api_field">
+                            {{ form.api.label(class="form-label fw-semibold") }}
+                            {{ form.api(class="form-control") }}
+                        </div>
+                        {% endif %}
+
+                        {# Manufacturer (Pharmaceutical) #}
+                        {% if form.manufacturer %}
+                        <div class="col-md-4" id="manufacturer_field">
+                            {{ form.manufacturer.label(class="form-label fw-semibold") }}
+                            {{ form.manufacturer(class="form-control") }}
+                        </div>
+                        {% endif %}
+
+                        {# Lot Number (Pharmaceutical & Milk) #}
+                        {% if form.lot_number %}
+                        <div class="col-md-4" id="lot_number_field">
+                            {{ form.lot_number.label(class="form-label fw-semibold") }}
+                            {{ form.lot_number(class="form-control") }}
+                        </div>
+                        {% endif %}
+
+                        {# Expiration Date (Pharmaceutical & Milk) #}
+                        {% if form.expiration_date %}
+                        <div class="col-md-4" id="expiration_date_field">
+                            {{ form.expiration_date.label(class="form-label fw-semibold") }}
+                            {{ form.expiration_date(class="form-control", type="date") }}
+                        </div>
+                        {% endif %}
+
+                        {# Alcohol Type (Food Alcohol) #}
+                        {% if form.alcohol_type %}
+                        <div class="col-md-4" id="alcohol_type_field">
+                            {{ form.alcohol_type.label(class="form-label fw-semibold") }}
+                            {{ form.alcohol_type(class="form-select") }}
+                        </div>
+                        {% endif %}
+
+                        {# Claim/Butt # (Food Alcohol) #}
+                        {% if form.claim_butt_number %}
+                        <div class="col-md-4" id="claim_butt_field">
+                            {{ form.claim_butt_number.label(class="form-label fw-semibold") }}
+                            {{ form.claim_butt_number(class="form-control") }}
+                        </div>
+                        {% endif %}
+
+                        {# Batch / Lot Number (Food Alcohol) #}
+                        {% if form.batch_lot_number %}
+                        <div class="col-md-4" id="batch_lot_field">
+                            {{ form.batch_lot_number.label(class="form-label fw-semibold") }}
+                            {{ form.batch_lot_number(class="form-control") }}
+                        </div>
+                        {% endif %}
+
+                        {# Date Received (always manual entry) #}
+                        {% if form.date_received %}
+                        <div class="col-md-4">
+                            {{ form.date_received.label(class="form-label fw-semibold") }}
+                            {{ form.date_received(class="form-control", type="date") }}
+                            {% for error in form.date_received.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+
+                        <div class="col-12">
+                            {{ form.scanned_file.label(class="form-label fw-semibold") }}
+                            {{ form.scanned_file(class="form-control") }}
+                            <div class="form-text">Upload submission form (PDF, PNG, JPG, TIFF, DOC, DOCX)</div>
+                            {% for error in form.scanned_file.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-12 d-flex gap-2 pt-2">
+                            {{ form.submit(class="btn btn-primary") }}
+                            <a href="{{ url_for('samples.sample_list') }}" class="btn btn-outline-secondary">Cancel</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sampleTypeSelect = document.getElementById('sample_type_select');
+
+    // Reload with ?type=... to render the correct server-side form class
+    sampleTypeSelect.addEventListener('change', function() {
+        const url = new URL(window.location.href);
+        url.searchParams.set('type', sampleTypeSelect.value);
+        window.location.assign(url.toString());
+    });
+});
+</script>
+{% endblock %}

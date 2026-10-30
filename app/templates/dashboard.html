@@ -1,0 +1,463 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - DGC SMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2><i class="bi bi-speedometer2"></i> Dashboard</h2>
+        <p class="text-muted mb-0 mt-1" style="font-size:.83rem;">
+            Welcome back, <strong>{{ current_user.full_name }}</strong>
+            <span class="badge bg-secondary ms-1" style="font-size:.7rem; vertical-align:middle;">{{ current_user.role_names }}</span>
+        </p>
+    </div>
+    <span class="text-muted d-none d-md-block" id="dashboard-date" style="font-size:.82rem;"></span>
+</div>
+
+<!-- ── Stat Cards ──────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+    {% if current_user.has_role(Role.CHEMIST) and not current_user.has_any_role(Role.OFFICER, Role.SENIOR_CHEMIST, Role.DEPUTY, Role.HOD, Role.ADMIN) %}
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card stat-blue h-100">
+            <div class="card-body">
+                <div class="stat-label">Total Assignments</div>
+                <div class="stat-value" data-count="{{ stats.total_assignments }}">{{ stats.total_assignments }}</div>
+            </div>
+            <i class="bi bi-clipboard2-data stat-icon"></i>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card stat-orange h-100">
+            <div class="card-body">
+                <div class="stat-label">Pending Tests</div>
+                <div class="stat-value" data-count="{{ stats.pending }}">{{ stats.pending }}</div>
+            </div>
+            <i class="bi bi-hourglass-split stat-icon"></i>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card stat-purple h-100">
+            <div class="card-body">
+                <div class="stat-label">Reports Submitted</div>
+                <div class="stat-value" data-count="{{ stats.submitted }}">{{ stats.submitted }}</div>
+            </div>
+            <i class="bi bi-send stat-icon"></i>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card stat-green h-100">
+            <div class="card-body">
+                <div class="stat-label">Completed</div>
+                <div class="stat-value" data-count="{{ stats.completed }}">{{ stats.completed }}</div>
+            </div>
+            <i class="bi bi-patch-check stat-icon"></i>
+        </div>
+    </div>
+
+    {% elif current_user.has_role(Role.OFFICER) and not current_user.has_any_role(Role.SENIOR_CHEMIST, Role.DEPUTY, Role.HOD, Role.ADMIN) %}
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card stat-blue h-100">
+            <div class="card-body">
+                <div class="stat-label">Total Samples</div>
+                <div class="stat-value" data-count="{{ stats.total_samples }}">{{ stats.total_samples }}</div>
+            </div>
+            <i class="bi bi-collection stat-icon"></i>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card stat-orange h-100">
+            <div class="card-body">
+                <div class="stat-label">Awaiting Assignment</div>
+                <div class="stat-value" data-count="{{ stats.registered }}">{{ stats.registered }}</div>
+            </div>
+            <i class="bi bi-person-plus stat-icon"></i>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <a href="{{ url_for('samples.sample_list', pending_prelim=1) }}"
+           class="text-decoration-none">
+        <div class="card stat-card stat-purple h-100 stat-card-link">
+            <div class="card-body">
+                <div class="stat-label">Preliminary Reviews</div>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="stat-value" data-count="{{ stats.preliminary_review }}">{{ stats.preliminary_review }}</div>
+                    {% if stats.preliminary_review > 0 %}
+                    <span class="badge stat-needs-review-badge ms-1">Needs Review</span>
+                    {% endif %}
+                </div>
+            </div>
+            <i class="bi bi-eye stat-icon"></i>
+        </div>
+        </a>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card stat-green h-100">
+            <div class="card-body">
+                <div class="stat-label">Certified</div>
+                <div class="stat-value" data-count="{{ stats.completed }}">{{ stats.completed }}</div>
+            </div>
+            <i class="bi bi-patch-check stat-icon"></i>
+        </div>
+    </div>
+
+    {% elif current_user.has_role(Role.DEPUTY) and not current_user.has_any_role(Role.HOD, Role.ADMIN) %}
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card stat-blue h-100">
+            <div class="card-body">
+                <div class="stat-label">Total Samples</div>
+                <div class="stat-value" data-count="{{ stats.total_samples }}">{{ stats.total_samples }}</div>
+            </div>
+            <i class="bi bi-collection stat-icon"></i>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card stat-purple h-100">
+            <div class="card-body">
+                <div class="stat-label">Awaiting Review</div>
+                <div class="stat-value" data-count="{{ stats.deputy_review }}">{{ stats.deputy_review }}</div>
+            </div>
+            <i class="bi bi-clipboard-check stat-icon"></i>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card stat-orange h-100">
+            <div class="card-body">
+                <div class="stat-label">Certificate Prep</div>
+                <div class="stat-value" data-count="{{ stats.certificate_prep }}">{{ stats.certificate_prep }}</div>
+            </div>
+            <i class="bi bi-file-earmark-medical stat-icon"></i>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card stat-green h-100">
+            <div class="card-body">
+                <div class="stat-label">Certified</div>
+                <div class="stat-value" data-count="{{ stats.completed }}">{{ stats.completed }}</div>
+            </div>
+            <i class="bi bi-patch-check stat-icon"></i>
+        </div>
+    </div>
+
+    {% elif current_user.has_role(Role.GOVT_CHEMIST_ASSISTANT) and not current_user.has_any_role(Role.OFFICER, Role.SENIOR_CHEMIST, Role.DEPUTY, Role.HOD, Role.ADMIN) %}
+    <div class="col-sm-6 col-xl-4">
+        <div class="card stat-card stat-blue h-100">
+            <div class="card-body">
+                <div class="stat-label">Total Samples</div>
+                <div class="stat-value" data-count="{{ stats.total_samples }}">{{ stats.total_samples }}</div>
+            </div>
+            <i class="bi bi-collection stat-icon"></i>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-4">
+        <div class="card stat-card stat-purple h-100">
+            <div class="card-body">
+                <div class="stat-label">Documents Uploaded (by me)</div>
+                <div class="stat-value" data-count="{{ stats.documents_uploaded }}">{{ stats.documents_uploaded }}</div>
+            </div>
+            <i class="bi bi-paperclip stat-icon"></i>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-4">
+        <div class="card stat-card stat-green h-100">
+            <div class="card-body">
+                <div class="stat-label">Certified</div>
+                <div class="stat-value" data-count="{{ stats.completed }}">{{ stats.completed }}</div>
+            </div>
+            <i class="bi bi-patch-check stat-icon"></i>
+        </div>
+    </div>
+
+    {% else %}
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card stat-blue h-100">
+            <div class="card-body">
+                <div class="stat-label">Total Samples</div>
+                <div class="stat-value" data-count="{{ stats.total_samples }}">{{ stats.total_samples }}</div>
+            </div>
+            <i class="bi bi-collection stat-icon"></i>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card stat-orange h-100">
+            <div class="card-body">
+                <div class="stat-label">Awaiting Assignment</div>
+                <div class="stat-value" data-count="{{ stats.awaiting_assignment }}">{{ stats.awaiting_assignment }}</div>
+            </div>
+            <i class="bi bi-person-plus stat-icon"></i>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card stat-purple h-100">
+            <div class="card-body">
+                <div class="stat-label">Reports Pending Review</div>
+                <div class="stat-value" data-count="{{ stats.reports_pending_review }}">{{ stats.reports_pending_review }}</div>
+            </div>
+            <i class="bi bi-eye stat-icon"></i>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card stat-green h-100">
+            <div class="card-body">
+                <div class="stat-label">Completed</div>
+                <div class="stat-value" data-count="{{ stats.completed }}">{{ stats.completed }}</div>
+            </div>
+            <i class="bi bi-patch-check stat-icon"></i>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ── Quick Actions ───────────────────────────────────────── -->
+<div class="card mb-4">
+    <div class="card-header">Quick Actions</div>
+    <div class="card-body d-flex gap-3 flex-wrap">
+        {# Explicit REGISTER_SAMPLE permission overrides role restrictions #}
+        {% if current_user.has_permission(Permission.REGISTER_SAMPLE) or current_user.has_any_role(Role.OFFICER, Role.ADMIN, Role.HOD) %}
+        <a href="{{ url_for('samples.register') }}" class="quick-action-btn qa-primary">
+            <i class="bi bi-plus-circle-fill"></i>
+            <span>Register Sample</span>
+        </a>
+        {% endif %}
+        <a href="{{ url_for('samples.sample_list') }}" class="quick-action-btn">
+            <i class="bi bi-collection"></i>
+            <span>All Samples</span>
+        </a>
+        <a href="{{ url_for('main.notifications') }}" class="quick-action-btn">
+            <i class="bi bi-bell"></i>
+            <span>Notifications</span>
+        </a>
+        {# Explicit VIEW_ANALYST_PERFORMANCE_REPORT permission overrides role restrictions #}
+        {% if current_user.has_permission(Permission.VIEW_ANALYST_PERFORMANCE_REPORT) or current_user.has_any_role(Role.SENIOR_CHEMIST, Role.HOD, Role.DEPUTY, Role.ADMIN) %}
+        <a href="{{ url_for('main.analyst_report') }}" class="quick-action-btn">
+            <i class="bi bi-person-lines-fill"></i>
+            <span>Analyst Report</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ── Pharmaceutical Samples Awaiting Assignment ─────────── -->
+{% if unassigned_pharma_samples is defined and unassigned_pharma_samples %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-capsule me-2 text-danger"></i>Pharmaceutical Samples Awaiting Chemist Assignment</span>
+        <a href="{{ url_for('samples.sample_list', type='PHARMACEUTICAL', status='REGISTERED') }}" class="btn btn-sm btn-outline-danger">View All</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Lab #</th>
+                    <th>Sample Name</th>
+                    <th>Type</th>
+                    <th>Date Registered</th>
+                    <th>Days Waiting</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in unassigned_pharma_samples %}
+                {% set days_waiting = (today - s.date_registered.date()).days %}
+                <tr class="align-middle">
+                    <td>
+                        <a href="{{ url_for('samples.detail', sample_id=s.id) }}"
+                           class="fw-semibold text-primary text-decoration-none">{{ s.lab_number }}</a>
+                    </td>
+                    <td>{{ s.sample_name }}</td>
+                    <td><span class="badge bg-secondary">{{ s.sample_type.value }}</span></td>
+                    <td>{{ s.date_registered.strftime('%d %b %Y') }}</td>
+                    <td>
+                        {% if days_waiting > 14 %}
+                        <span class="badge bg-danger"><i class="bi bi-exclamation-circle me-1"></i>{{ days_waiting }} day{{ 's' if days_waiting != 1 else '' }}</span>
+                        {% elif days_waiting > 7 %}
+                        <span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>{{ days_waiting }} day{{ 's' if days_waiting != 1 else '' }}</span>
+                        {% else %}
+                        <span class="badge bg-secondary">{{ days_waiting }} day{{ 's' if days_waiting != 1 else '' }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('samples.assign', sample_id=s.id) }}"
+                           class="btn btn-sm btn-outline-primary">Assign</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- ── Upcoming Report Deadlines ──────────────────────────── -->
+{% if upcoming_deadlines %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-alarm me-2 text-warning"></i>Upcoming Report Deadlines</span>
+        <a href="{{ url_for('samples.sample_list') }}" class="btn btn-sm btn-outline-warning">View Samples</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Lab #</th>
+                    <th>Sample Name</th>
+                    <th>Due Date</th>
+                    <th>Status</th>
+                    <th>Urgency</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in upcoming_deadlines %}
+                <tr class="align-middle">
+                    <td>
+                        <a href="{{ url_for('samples.detail', sample_id=item.sample.id) }}"
+                           class="fw-semibold text-primary text-decoration-none">{{ item.sample.lab_number }}</a>
+                    </td>
+                    <td>{{ item.sample.sample_name }}</td>
+                    <td class="fw-semibold">{{ item.sample.expected_report_date.strftime('%d %b %Y') }}</td>
+                    <td>
+                        <span class="badge bg-{{ item.status_color }}">{{ item.sample.status.value }}</span>
+                    </td>
+                    <td>
+                        {% if item.days_remaining <= 0 %}
+                        <span class="badge bg-danger"><i class="bi bi-exclamation-circle me-1"></i>Due Today</span>
+                        {% elif item.days_remaining == 1 %}
+                        <span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>Tomorrow</span>
+                        {% elif item.days_remaining <= 3 %}
+                        <span class="badge bg-info"><i class="bi bi-calendar-event me-1"></i>{{ item.days_remaining }} days</span>
+                        {% else %}
+                        <span class="badge bg-secondary">{{ item.days_remaining }} days</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- ── Recent Notifications ───────────────────────────────── -->
+{% if notifications %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-bell me-2 text-primary"></i>Recent Notifications</span>
+        <a href="{{ url_for('main.notifications') }}" class="btn btn-sm btn-outline-primary">View All</a>
+    </div>
+    <div class="list-group list-group-flush">
+        {% for notif in notifications[:5] %}
+        <a href="{{ url_for('main.mark_notification_read', notif_id=notif.id) }}"
+           class="list-group-item list-group-item-action border-0 py-3 {% if not notif.is_read %}notif-unread{% endif %}"
+           onclick="event.preventDefault(); this.closest('.list-group').querySelector('#notif-form-{{ notif.id }}').submit();">
+            <form id="notif-form-{{ notif.id }}" method="POST" action="{{ url_for('main.mark_notification_read', notif_id=notif.id) }}" class="d-none">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            </form>
+            <div class="d-flex justify-content-between align-items-start gap-3">
+                <div class="d-flex gap-3 align-items-start">
+                    {# Type-aware icon #}
+                    {% if 'Report Due' in notif.title %}
+                    <div class="notif-type-sm reminder"><i class="bi bi-alarm"></i></div>
+                    {% elif 'Submitted' in notif.title %}
+                    <div class="notif-type-sm report"><i class="bi bi-file-earmark-text"></i></div>
+                    {% elif 'Review' in notif.title or 'Accepted' in notif.title %}
+                    <div class="notif-type-sm review"><i class="bi bi-clipboard-check"></i></div>
+                    {% elif 'Returned' in notif.title or 'Rejected' in notif.title %}
+                    <div class="notif-type-sm alert-icon"><i class="bi bi-exclamation-triangle"></i></div>
+                    {% else %}
+                    <div class="notif-type-sm default"><i class="bi bi-bell"></i></div>
+                    {% endif %}
+                    <div>
+                        <div class="fw-semibold mb-1" style="font-size:.855rem;">
+                            {{ notif.title }}
+                            {% if not notif.is_read %}
+                            <span class="badge bg-primary ms-1" style="font-size:.6rem;">New</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-muted" style="font-size:.78rem;">{{ notif.message | truncate(130) }}</div>
+                    </div>
+                </div>
+                <small class="text-muted text-nowrap" style="font-size:.72rem;">
+                    {{ notif.created_at.strftime('%d %b %Y') }}
+                </small>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.notif-unread { background: #f0f7ff; border-left: 3px solid var(--dgc-secondary) !important; }
+.notif-dot-wrap { width: 10px; flex-shrink: 0; display: flex; align-items: center; }
+.notif-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+}
+.notif-dot-new  { background: var(--dgc-secondary); box-shadow: 0 0 0 2px rgba(46,134,193,.3); }
+.notif-dot-read { background: #cbd5e1; }
+[data-bs-theme="dark"] .notif-unread { background: #1a2e47; border-left-color: var(--dgc-secondary) !important; }
+
+/* Dashboard notification type icons */
+.notif-type-sm {
+    width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-size: .82rem;
+}
+.notif-type-sm.reminder { background: #fef3c7; color: #d97706; }
+.notif-type-sm.report   { background: #dbeafe; color: #2563eb; }
+.notif-type-sm.review   { background: #d1fae5; color: #059669; }
+.notif-type-sm.alert-icon { background: #fee2e2; color: #dc2626; }
+.notif-type-sm.default  { background: #f1f5f9; color: #64748b; }
+[data-bs-theme="dark"] .notif-type-sm.reminder { background: #422006; color: #fbbf24; }
+[data-bs-theme="dark"] .notif-type-sm.report { background: #172554; color: #60a5fa; }
+[data-bs-theme="dark"] .notif-type-sm.review { background: #052e16; color: #34d399; }
+[data-bs-theme="dark"] .notif-type-sm.alert-icon { background: #450a0a; color: #f87171; }
+[data-bs-theme="dark"] .notif-type-sm.default { background: #1e293b; color: #94a3b8; }
+
+/* Linked stat card */
+.stat-card-link { cursor: pointer; }
+.stat-card-link:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 14px 32px rgba(0,0,0,.25) !important;
+}
+
+/* Preliminary review needs-review badge on stat card */
+.stat-needs-review-badge {
+    font-size: .7rem;
+    background: rgba(255,255,255,.9);
+    color: #6c3483;
+    vertical-align: middle;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+/* Live date/time in page header */
+(function () {
+    const el = document.getElementById('dashboard-date');
+    if (!el) return;
+    const fmt = new Intl.DateTimeFormat('en-JM', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+    el.textContent = fmt.format(new Date());
+})();
+
+/* Animate stat counters on load */
+document.querySelectorAll('.stat-value[data-count]').forEach(function (el) {
+    const target = parseInt(el.dataset.count, 10);
+    if (isNaN(target) || target === 0) return;
+    const duration = 600;
+    const start    = performance.now();
+    el.textContent = '0';
+    function step(now) {
+        const elapsed = now - start;
+        const progress = Math.min(elapsed / duration, 1);
+        const ease = 1 - Math.pow(1 - progress, 3); /* ease-out cubic */
+        el.textContent = Math.round(ease * target);
+        if (progress < 1) requestAnimationFrame(step);
+        else el.textContent = target;
+    }
+    requestAnimationFrame(step);
+});
+</script>
+{% endblock %}

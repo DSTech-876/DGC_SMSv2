@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Prepare Certificate - DGC SMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2><i class="bi bi-file-earmark-medical"></i> Prepare Certificate of Analysis</h2>
+    <a href="{{ url_for('samples.detail', sample_id=sample.id) }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <!-- Sample Info -->
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-clipboard2-data me-2"></i>{{ sample.lab_number }} &mdash; {{ sample.sample_name }}</h5></div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <dl class="mb-0">
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Type</dt>
+                            <dd class="mb-3"><span class="badge bg-info text-dark">{{ sample.sample_type.value }}</span></dd>
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Source</dt>
+                            <dd class="mb-3">{{ sample.source or 'N/A' }}</dd>
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Date Received</dt>
+                            <dd class="mb-0">{{ sample.date_received.strftime('%d %b %Y') }}</dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-6">
+                        <dl class="mb-0">
+                            {% if sample.quantity %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Quantity</dt>
+                            <dd class="mb-3">{{ sample.quantity }}</dd>
+                            {% endif %}
+                            {% if sample.parish %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Parish</dt>
+                            <dd class="mb-0">{{ sample.parish }}</dd>
+                            {% endif %}
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if sample.status.value == 'Returned by HOD' and sample.hod_review_comments %}
+        <div class="alert alert-warning d-flex gap-2 mb-4">
+            <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
+            <div>
+                <h6 class="fw-semibold mb-1">Certificate returned by Government Chemist</h6>
+                <p class="mb-0">{{ sample.hod_review_comments }}</p>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Certificate Form -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Certificate Details</h5>
+                <small class="text-muted">Prepare the Certificate of Analysis for Government Chemist review and signing.</small>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST" enctype="multipart/form-data">
+                    {{ form.hidden_tag() }}
+
+                    <div class="row g-3">
+                        <div class="col-12">
+                            {{ form.certificate_text.label(class="form-label fw-semibold") }}
+                            {{ form.certificate_text(class="form-control", rows=12, placeholder="Enter the Certificate of Analysis content...") }}
+                            {% for error in form.certificate_text.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-12">
+                            {{ form.certificate_file.label(class="form-label fw-semibold") }}
+                            {{ form.certificate_file(class="form-control") }}
+                            <div class="form-text">Optional: attach the certificate document (PDF, image).</div>
+                            {% if sample.certificate_file %}
+                            <div class="form-text">
+                                Current file: <strong>{{ sample.certificate_file_original_name }}</strong>
+                                &mdash; uploading a new file creates a new version (previous file is retained).
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-6">
+                            {{ form.coa_reference.label(class="form-label fw-semibold") }}
+                            {{ form.coa_reference(class="form-control", placeholder="e.g. COA-2025-001") }}
+                            <div class="form-text">Reference number for this Certificate of Analysis.</div>
+                            {% for error in form.coa_reference.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-md-6">
+                            {{ form.accreditation.label(class="form-label fw-semibold") }}
+                            {{ form.accreditation(class="form-select") }}
+                            <div class="form-text">
+                                <i class="bi bi-patch-check-fill text-success me-1"></i>Mark whether this sample is accredited before certifying.
+                            </div>
+                            {% for error in form.accreditation.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-12 d-flex gap-2 pt-2">
+                            {{ form.submit(class="btn btn-primary") }}
+                            <a href="{{ url_for('samples.detail', sample_id=sample.id) }}"
+                               class="btn btn-outline-secondary">Cancel</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

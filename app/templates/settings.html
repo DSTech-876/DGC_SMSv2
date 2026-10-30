@@ -1,0 +1,554 @@
+{% extends "base.html" %}
+{% block title %}Settings - DGC SMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2><i class="bi bi-gear"></i> Settings</h2>
+</div>
+
+<div class="row">
+    <div class="col-lg-6">
+        <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <!-- Email notifications card (admin/HOD only) -->
+        {% if is_admin_or_hod %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-envelope me-2"></i>Email Notifications</h5>
+            </div>
+            <div class="card-body">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               id="email_enabled" name="email_enabled"
+                               {% if email_enabled %}checked{% endif %}>
+                        <label class="form-check-label fw-semibold" for="email_enabled">
+                            Enable email notifications
+                        </label>
+                    </div>
+                    <p class="text-muted small mb-0">
+                        When disabled, in-app notifications are still created but no emails are sent.
+                        Useful when the mail server is not configured.
+                    </p>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if smtp_settings is not none %}
+        <!-- SMTP / Mail Server settings card (admin only) -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-server me-2"></i>Mail Server (SMTP)</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    Configure the outgoing mail server. Leave <strong>SMTP Server</strong> blank to
+                    use the default server set in the application configuration file.
+                </p>
+                <div class="alert alert-info small py-2 mb-3">
+                    <i class="bi bi-info-circle me-1"></i>
+                    The SMTP password is stored in the database. Ensure your database file is
+                    protected with appropriate file-system permissions.
+                </div>
+                <div class="row g-3">
+                    <div class="col-sm-8">
+                        <label for="smtp_server" class="form-label fw-semibold">SMTP Server</label>
+                        <input type="text" class="form-control" id="smtp_server" name="smtp_server"
+                               placeholder="e.g. smtp.gmail.com"
+                               value="{{ smtp_settings.server }}">
+                    </div>
+                    <div class="col-sm-4">
+                        <label for="smtp_port" class="form-label fw-semibold">Port</label>
+                        <input type="number" class="form-control" id="smtp_port" name="smtp_port"
+                               placeholder="587"
+                               value="{{ smtp_settings.port }}">
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch"
+                                   id="smtp_use_tls" name="smtp_use_tls"
+                                   {% if smtp_settings.use_tls %}checked{% endif %}>
+                            <label class="form-check-label fw-semibold" for="smtp_use_tls">
+                                Use TLS (STARTTLS)
+                            </label>
+                        </div>
+                        <p class="text-muted small mb-0 mt-1">
+                            Enable for port 587 (recommended). Disable for port 465 (SSL) or
+                            unencrypted port 25.
+                        </p>
+                    </div>
+                    <div class="col-12">
+                        <label for="smtp_username" class="form-label fw-semibold">
+                            Username / Login Email
+                        </label>
+                        <input type="text" class="form-control" id="smtp_username"
+                               name="smtp_username" autocomplete="username"
+                               placeholder="e.g. yourname@gmail.com"
+                               value="{{ smtp_settings.username }}">
+                    </div>
+                    <div class="col-12">
+                        <label for="smtp_password" class="form-label fw-semibold">Password</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="smtp_password"
+                                   name="smtp_password" autocomplete="new-password"
+                                   placeholder="{% if smtp_settings.has_password %}Leave blank to keep existing password{% else %}Enter SMTP password{% endif %}">
+                            <button class="btn btn-outline-secondary" type="button"
+                                    id="toggleSmtpPassword" title="Show/hide password">
+                                <i class="bi bi-eye" id="smtpPasswordEyeIcon"></i>
+                            </button>
+                        </div>
+                        {% if smtp_settings.has_password %}
+                        <p class="text-muted small mt-1 mb-0">
+                            <i class="bi bi-lock-fill me-1"></i>A password is saved.
+                            Leave blank to keep it unchanged.
+                        </p>
+                        {% endif %}
+                    </div>
+                    <div class="col-12">
+                        <label for="smtp_sender" class="form-label fw-semibold">
+                            From / Sender Address
+                        </label>
+                        <input type="email" class="form-control" id="smtp_sender"
+                               name="smtp_sender" autocomplete="off"
+                               placeholder="e.g. dgcjamaica@gmail.com"
+                               value="{{ smtp_settings.sender }}">
+                        <p class="text-muted small mt-1 mb-0">
+                            The email address that will appear in the <em>From</em> field.
+                            Defaults to the username if left blank.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Preliminary Review Mode card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-check2-circle me-2"></i>Preliminary Review</h5>
+            </div>
+            <div class="card-body">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               id="preliminary_review_grouped" name="preliminary_review_grouped"
+                               {% if preliminary_review_grouped %}checked{% endif %}>
+                        <label class="form-check-label fw-semibold" for="preliminary_review_grouped">
+                            Group preliminary review (one review covers all pending tests)
+                        </label>
+                    </div>
+                    <p class="text-muted small mb-0">
+                        When <strong>enabled</strong>, submitting a preliminary review for one test will
+                        automatically apply the same decision to <em>all</em> other tests on the same sample
+                        that are currently awaiting review. Useful when a single review decision applies
+                        to every test at once.<br>
+                        When <strong>disabled</strong> (default), each test assignment must be reviewed
+                        individually.
+                    </p>
+            </div>
+        </div>
+
+        <!-- Senior Chemist Review Mode card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-clipboard-check me-2"></i>Senior Chemist Review</h5>
+            </div>
+            <div class="card-body">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               id="technical_review_grouped" name="technical_review_grouped"
+                               {% if technical_review_grouped %}checked{% endif %}>
+                        <label class="form-check-label fw-semibold" for="technical_review_grouped">
+                            Group Senior Chemist review (one review covers all pending tests)
+                        </label>
+                    </div>
+                    <p class="text-muted small mb-0">
+                        When <strong>enabled</strong>, submitting a Senior Chemist review for one test will
+                        automatically apply the same decision to <em>all</em> other tests on the same sample
+                        that are currently awaiting Senior Chemist review. Note: reassigning a chemist is
+                        not available in grouped mode.<br>
+                        When <strong>disabled</strong> (default), each test assignment must be reviewed
+                        individually.
+                    </p>
+            </div>
+        </div>
+
+        <!-- Analyst Report — Default Resubmission Types card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-funnel me-2"></i>Analyst Report — Default Resubmission Types</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    Choose which resubmission types are counted by default when users open the
+                    Analyst Performance Report. Users can override this per session using the
+                    report's filter controls.
+                </p>
+                <div class="d-flex flex-wrap gap-3 align-items-center">
+                    <div class="form-check">
+                        <input class="form-check-input settings-resub-all" type="checkbox"
+                               id="default_resub_all" name="default_resub_types" value="all"
+                               {% if 'all' in default_resub_selected %}checked{% endif %}
+                               onchange="handleSettingsResubAll(this)">
+                        <label class="form-check-label fw-semibold" for="default_resub_all">
+                            All Review Types (default)
+                        </label>
+                    </div>
+                    {% for type_key, type_label in resubmission_types %}
+                    <div class="form-check">
+                        <input class="form-check-input settings-resub-type" type="checkbox"
+                               id="default_resub_{{ type_key }}" name="default_resub_types"
+                               value="{{ type_key }}"
+                               {% if type_key in default_resub_selected %}checked{% endif %}
+                               onchange="handleSettingsResubType()">
+                        <label class="form-check-label" for="default_resub_{{ type_key }}">
+                            {{ type_label }}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- QA Performance Summary — Calculation Method card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>QA Performance Summary — Calculation Method</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    Choose whether the QA Performance Summary counts each unique
+                    <strong>sample</strong> or each individual <strong>test assignment</strong>.
+                    A sample may have multiple test assignments; counting by sample avoids
+                    inflating totals when several tests are run on the same sample.
+                </p>
+                <div class="d-flex flex-wrap gap-4">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="qa_performance_count_by"
+                               id="qa_count_sample" value="sample"
+                               {% if qa_performance_count_by == 'sample' %}checked{% endif %}>
+                        <label class="form-check-label fw-semibold" for="qa_count_sample">
+                            By Sample <span class="badge bg-success ms-1">Recommended</span>
+                        </label>
+                        <div class="text-muted small mt-1">
+                            Each sample is counted once regardless of how many tests were assigned.
+                        </div>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="qa_performance_count_by"
+                               id="qa_count_test" value="test"
+                               {% if qa_performance_count_by == 'test' %}checked{% endif %}>
+                        <label class="form-check-label fw-semibold" for="qa_count_test">
+                            By Test Assignment
+                        </label>
+                        <div class="text-muted small mt-1">
+                            Each individual test assignment is counted separately.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-save me-1"></i>Save Settings
+            </button>
+        </div>
+        </form>
+
+        <!-- Test email form (outside the settings form, admin/HOD only) -->
+        {% if is_admin_or_hod %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-send-check me-2"></i>Test Email Delivery</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    Send a test email to <strong>{{ current_user.email }}</strong> to confirm the mail
+                    server is reachable and credentials are correct.
+                </p>
+                <form method="POST" action="{{ url_for('main.test_email') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-envelope-arrow-up me-1"></i>Send Test Email
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if current_user.has_role(Role.ADMIN) %}
+        <!-- Export / Import card -->
+        <div class="card mb-4 border-primary">
+            <div class="card-header" style="background: var(--dgc-primary, #1a5276); color: #fff;">
+                <h5 class="mb-0"><i class="bi bi-arrow-left-right me-2"></i>Data Export &amp; Import</h5>
+            </div>
+            <div class="card-body">
+                <!-- Export section -->
+                <h6 class="fw-semibold mb-1"><i class="bi bi-download me-1"></i>Export Data</h6>
+                <p class="text-muted small mb-2">
+                    Download a complete backup of all data (users, samples, assignments, history, settings,
+                    uploaded files) as a ZIP file. Use this to migrate data to a new server or as a backup.
+                </p>
+                <a href="{{ url_for('main.export_data') }}" class="btn btn-primary mb-4" id="exportBtn"
+                   onclick="startExportProgress(event)">
+                    <i class="bi bi-download me-1"></i>Export All Data
+                </a>
+
+                <hr>
+
+                <!-- Import section -->
+                <h6 class="fw-semibold mb-1"><i class="bi bi-upload me-1"></i>Import Data</h6>
+                <p class="text-muted small mb-2">
+                    Restore data from a previously exported ZIP file. This will <strong>replace</strong>
+                    all existing data in the system (users, samples, settings, uploaded files).
+                </p>
+                <div class="alert alert-warning small py-2 mb-3">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    <strong>Warning:</strong> Importing will overwrite ALL current data.
+                    Consider exporting a backup first.
+                </div>
+                <form method="POST" action="{{ url_for('main.import_data') }}" enctype="multipart/form-data"
+                      id="importForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <input class="form-control" type="file" name="import_file" id="import_file"
+                               accept=".zip" required>
+                    </div>
+                    <button type="button" class="btn btn-warning" id="importDataBtn">
+                        <i class="bi bi-upload me-1"></i>Import Data
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Import confirmation modal -->
+        <div class="modal fade" id="importConfirmModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning text-dark">
+                        <h5 class="modal-title">Confirm Data Import</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>This will <strong>replace all existing data</strong> including:</p>
+                        <ul>
+                            <li>All user accounts &amp; passwords</li>
+                            <li>All samples, assignments &amp; reports</li>
+                            <li>All review history &amp; audit logs</li>
+                            <li>All settings, KPI targets &amp; calendar data</li>
+                            <li>All uploaded files</li>
+                        </ul>
+                        <p class="text-danger fw-bold mb-0">
+                            This action cannot be undone. Make sure you have a backup.
+                        </p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="importCancelBtn">Cancel</button>
+                        <button type="button" class="btn btn-warning" id="confirmImportBtn">
+                            <i class="bi bi-upload me-1"></i>Yes, Import Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Danger zone card -->
+        <div class="card border-danger">
+            <div class="card-header" style="background: #dc3545; color: #fff;">
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Danger Zone</h5>
+            </div>
+            <div class="card-body">
+                <h6 class="fw-semibold mb-1">Clear All Sample Data</h6>
+                <p class="text-muted small mb-2">
+                    Permanently delete <strong>all</strong> samples, assignments, history, and related
+                    notifications. User accounts will not be affected.
+                </p>
+                <p class="mb-3">
+                    <span class="badge bg-secondary">{{ sample_count }} sample{{ 's' if sample_count != 1 else '' }}</span>
+                    currently in the system.
+                </p>
+                <button type="button" class="btn btn-danger"
+                        data-bs-toggle="modal" data-bs-target="#clearDataModal"
+                        {% if sample_count == 0 %}disabled{% endif %}>
+                    <i class="bi bi-trash3 me-1"></i>Clear Sample Data
+                </button>
+            </div>
+        </div>
+
+        <!-- Confirmation modal -->
+        <div class="modal fade" id="clearDataModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header" style="background: #dc3545; color: #fff;">
+                        <h5 class="modal-title">Confirm Clear Sample Data</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>This will <strong>permanently delete</strong> all:</p>
+                        <ul>
+                            <li>Samples ({{ sample_count }})</li>
+                            <li>Assignments &amp; reports</li>
+                            <li>Review history</li>
+                            <li>Sample-related notifications</li>
+                        </ul>
+                        <p class="text-danger fw-bold mb-0">This action cannot be undone.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <form method="POST" action="{{ url_for('main.clear_sample_data') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-danger">
+                                <i class="bi bi-trash3 me-1"></i>Yes, Clear All Data
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Full-page progress overlay -->
+<div id="progressOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.55);
+     z-index:9999; align-items:center; justify-content:center; flex-direction:column; gap:1rem;">
+    <div class="spinner-border text-light" style="width:3rem; height:3rem;" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <p id="progressMsg" class="text-white fw-semibold fs-5 mb-0">Please wait...</p>
+</div>
+
+<script>
+    /* ── SMTP password visibility toggle ──────────────────── */
+    (function () {
+        var btn = document.getElementById('toggleSmtpPassword');
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+            var input = document.getElementById('smtp_password');
+            var icon  = document.getElementById('smtpPasswordEyeIcon');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'bi bi-eye-slash';
+            } else {
+                input.type = 'password';
+                icon.className = 'bi bi-eye';
+            }
+        });
+    })();
+
+    /* ── Export progress ───────────────────────────────── */
+    function startExportProgress(e) {
+        showOverlay('Preparing export... this may take a moment.');
+
+        // Trigger the download via a hidden iframe so the page stays open
+        var iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = e.currentTarget.href;
+        document.body.appendChild(iframe);
+
+        // Hide overlay when the iframe receives a response (download started)
+        var fallbackTimer = setTimeout(function () {
+            hideOverlay();
+            if (iframe.parentNode) document.body.removeChild(iframe);
+        }, 30000);
+
+        iframe.addEventListener('load', function () {
+            clearTimeout(fallbackTimer);
+            setTimeout(function () {
+                hideOverlay();
+                if (iframe.parentNode) document.body.removeChild(iframe);
+            }, 400);
+        });
+
+        e.preventDefault();
+    }
+
+    /* ── Import Data button ────────────────────────────── */
+    document.addEventListener('DOMContentLoaded', function () {
+        var importDataBtn = document.getElementById('importDataBtn');
+        if (importDataBtn) {
+            importDataBtn.addEventListener('click', function () {
+                var modal = bootstrap.Modal.getOrCreateInstance(
+                    document.getElementById('importConfirmModal')
+                );
+                modal.show();
+            });
+        }
+
+        var confirmBtn = document.getElementById('confirmImportBtn');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', function () {
+                var fileInput = document.getElementById('import_file');
+                if (!fileInput || !fileInput.files.length) {
+                    fileInput.classList.add('is-invalid');
+                    fileInput.focus();
+                    return;
+                }
+
+                // Disable buttons to prevent double-submit
+                confirmBtn.disabled = true;
+                var cancelBtn = document.getElementById('importCancelBtn');
+                if (cancelBtn) cancelBtn.disabled = true;
+
+                // Re-enable buttons if something goes wrong before submission
+                var reEnableTimer = setTimeout(function () {
+                    confirmBtn.disabled = false;
+                    if (cancelBtn) cancelBtn.disabled = false;
+                }, 15000);
+
+                // Close modal then show overlay so the overlay is on top
+                var modalEl = document.getElementById('importConfirmModal');
+                var bsModal = bootstrap.Modal.getInstance(modalEl);
+                if (bsModal) bsModal.hide();
+
+                modalEl.addEventListener('hidden.bs.modal', function () {
+                    clearTimeout(reEnableTimer);
+                    showOverlay('Importing data... please do not close this page.');
+                    document.getElementById('importForm').submit();
+                }, { once: true });
+            });
+        }
+    });
+
+    /* ── Helpers ───────────────────────────────────────── */
+    function showOverlay(msg) {
+        var overlay = document.getElementById('progressOverlay');
+        document.getElementById('progressMsg').textContent = msg;
+        overlay.style.display = 'flex';
+    }
+
+    function hideOverlay() {
+        var overlay = document.getElementById('progressOverlay');
+        overlay.style.display = 'none';
+    }
+
+    function handleSettingsResubAll(checkbox) {
+        const typeChecks = document.querySelectorAll('.settings-resub-type');
+        if (checkbox.checked) {
+            typeChecks.forEach(c => { c.checked = false; c.disabled = true; });
+        } else {
+            typeChecks.forEach(c => { c.disabled = false; });
+        }
+    }
+
+    function handleSettingsResubType() {
+        const allCheck = document.getElementById('default_resub_all');
+        const typeChecks = document.querySelectorAll('.settings-resub-type');
+        const anyChecked = Array.from(typeChecks).some(c => c.checked);
+        if (anyChecked) {
+            allCheck.checked = false;
+        }
+    }
+
+    // On page load: enforce consistent state for settings resubmission checkboxes
+    (function () {
+        const allCheck = document.getElementById('default_resub_all');
+        const typeChecks = document.querySelectorAll('.settings-resub-type');
+        if (allCheck && allCheck.checked) {
+            typeChecks.forEach(c => { c.disabled = true; });
+        }
+    })();
+</script>
+{% endblock %}

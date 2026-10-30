@@ -1,0 +1,811 @@
+{% extends "base.html" %}
+{% block title %}Analyst Performance Report - DGC SMS{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <h2><i class="bi bi-people"></i> Analyst Performance Report</h2>
+    <a href="{{ url_for('main.analyst_report_download', year=year, quarter=quarter, branch=branch_filter, **{'resub_type': resub_selected, 'status': status_selected}) }}"
+       class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-download me-1"></i>Download CSV
+    </a>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="GET" id="analyst-filter-form" class="row g-2 align-items-end">
+            <div class="col-sm-6 col-md-2">
+                <label class="form-label small fw-semibold mb-1">Financial Year</label>
+                <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
+                    {% for y in available_years %}
+                    <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}/{{ y + 1 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-sm-6 col-md-2">
+                <label class="form-label small fw-semibold mb-1">Quarter</label>
+                <select name="quarter" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="0" {% if quarter == 0 %}selected{% endif %}>All Quarters</option>
+                    <option value="1" {% if quarter == 1 %}selected{% endif %}>Q1 (Apr-Jun)</option>
+                    <option value="2" {% if quarter == 2 %}selected{% endif %}>Q2 (Jul-Sep)</option>
+                    <option value="3" {% if quarter == 3 %}selected{% endif %}>Q3 (Oct-Dec)</option>
+                    <option value="4" {% if quarter == 4 %}selected{% endif %}>Q4 (Jan-Mar)</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-md-2">
+                <label class="form-label small fw-semibold mb-1">Laboratory</label>
+                <select name="branch" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">All Laboratories</option>
+                    {% for b in Branch %}
+                    <option value="{{ b.name }}" {% if branch_filter == b.name %}selected{% endif %}>{{ b.value }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-sm-6 col-md-3">
+                <label class="form-label small fw-semibold mb-1">Analyst</label>
+                <select name="analyst_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="0">— All Analysts (Summary) —</option>
+                    {% for a in analyst_list_all %}
+                    <option value="{{ a.id }}" {% if analyst_id == a.id %}selected{% endif %}>
+                        {{ a.name }} ({{ a.total }} test{{ 's' if a.total != 1 else '' }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-sm-6 col-md-3">
+                <label class="form-label small fw-semibold mb-1">Search Analyst</label>
+                <input type="text" name="search" class="form-control form-control-sm"
+                       placeholder="Analyst name…" value="{{ search }}">
+            </div>
+            <div class="col-12">
+                <label class="form-label small fw-semibold mb-1">
+                    <i class="bi bi-diagram-3 me-1"></i>Workflow Status Filter
+                    <span class="text-muted fw-normal">(filter which assignments appear in the report)</span>
+                </label>
+                <div class="d-flex flex-wrap gap-3 align-items-center">
+                    <div class="form-check">
+                        <input class="form-check-input status-all-check" type="checkbox"
+                               id="status_all" name="status" value="all"
+                               {% if 'all' in status_selected %}checked{% endif %}
+                               onchange="handleStatusAllChange(this)">
+                        <label class="form-check-label fw-semibold" for="status_all">
+                            All Statuses
+                        </label>
+                    </div>
+                    {% for status_name, status_label in workflow_statuses %}
+                    <div class="form-check">
+                        <input class="form-check-input status-type-check" type="checkbox"
+                               id="status_{{ status_name }}" name="status" value="{{ status_name }}"
+                               {% if status_name in status_selected %}checked{% endif %}
+                               onchange="handleStatusTypeChange()">
+                        <label class="form-check-label" for="status_{{ status_name }}">
+                            {{ status_label }}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="col-12">
+                <label class="form-label small fw-semibold mb-1">
+                    <i class="bi bi-funnel me-1"></i>Resubmission Types to Count
+                    <span class="text-muted fw-normal">(counts returns to analyst from each review stage)</span>
+                </label>
+                <div class="d-flex flex-wrap gap-3 align-items-center">
+                    <div class="form-check">
+                        <input class="form-check-input resub-check" type="checkbox"
+                               id="resub_all" name="resub_type" value="all"
+                               {% if 'all' in resub_selected %}checked{% endif %}
+                               onchange="handleResubAllChange(this)">
+                        <label class="form-check-label fw-semibold" for="resub_all">
+                            All Review Types
+                        </label>
+                    </div>
+                    {% for type_key, type_label in resubmission_types %}
+                    <div class="form-check">
+                        <input class="form-check-input resub-type-check" type="checkbox"
+                               id="resub_{{ type_key }}" name="resub_type" value="{{ type_key }}"
+                               {% if type_key in resub_selected %}checked{% endif %}
+                               onchange="handleResubTypeChange()">
+                        <label class="form-check-label" for="resub_{{ type_key }}">
+                            {{ type_label }}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="col-sm-auto d-flex align-items-end">
+                <button type="submit" class="btn btn-primary btn-sm me-1">Filter</button>
+                <a href="{{ url_for('main.analyst_report', year=year) }}" class="btn btn-outline-secondary btn-sm">Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Active Filters Notice -->
+<div class="d-flex flex-wrap gap-2 mb-3">
+    {% if 'all' not in status_selected %}
+    <div class="alert alert-warning py-2 mb-0 d-flex align-items-center gap-2 flex-grow-1" role="alert">
+        <i class="bi bi-funnel-fill"></i>
+        <span>
+            <strong>Workflow status filter active:</strong>
+            {% for s in status_selected %}
+            <span class="badge bg-secondary">{{ workflow_statuses | selectattr('0', 'equalto', s) | map(attribute='1') | first | default(s) }}</span>
+            {% endfor %}
+        </span>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-2">
+        <div class="card text-center">
+            <div class="card-body py-3">
+                <div class="fs-3 fw-bold text-primary">{{ total_analysts }}</div>
+                <small class="text-muted">Analysts</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-2">
+        <div class="card text-center">
+            <div class="card-body py-3">
+                <div class="fs-3 fw-bold text-info">{{ total_assignments }}</div>
+                <small class="text-muted">Total Assigned</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-2">
+        <div class="card text-center">
+            <div class="card-body py-3">
+                <div class="fs-3 fw-bold text-warning">{{ total_submitted }}</div>
+                <small class="text-muted">Total Submitted</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-2">
+        <div class="card text-center border-danger">
+            <div class="card-body py-3">
+                <div class="fs-3 fw-bold text-danger">{{ total_returned_correction }}</div>
+                <small class="text-muted">Returned for Correction</small>
+                <div class="text-muted" style="font-size:0.7rem;">(from Preliminary Review)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-2">
+        <div class="card text-center {% if avg_resubmissions_per_sample > 0 %}border-danger{% else %}border-light{% endif %}">
+            <div class="card-body py-3">
+                <div class="fs-3 fw-bold {% if avg_resubmissions_per_sample > 0 %}text-danger{% else %}text-muted{% endif %}">
+                    {{ avg_resubmissions_per_sample }}
+                </div>
+                <small class="text-muted">Avg Resubmissions / Sample</small>
+                <div class="text-muted" style="font-size:0.7rem;">(Preliminary Review)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-2">
+        <div class="card text-center border-danger">
+            <div class="card-body py-3">
+                <div class="fs-3 fw-bold text-danger">{{ total_returned_deputy }}</div>
+                <small class="text-muted">Returned by Deputy</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-2">
+        <div class="card text-center border-danger">
+            <div class="card-body py-3">
+                <div class="fs-3 fw-bold text-danger">{{ total_returned_hod }}</div>
+                <small class="text-muted">Returned by HOD</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-2">
+        <div class="card text-center border-success">
+            <div class="card-body py-3">
+                <div class="fs-3 fw-bold text-success">{{ total_certified }}</div>
+                <small class="text-muted">Certified</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-2">
+        <div class="card text-center border-success">
+            <div class="card-body py-3">
+                <div class="fs-3 fw-bold text-success">{{ total_completed_samples }}</div>
+                <small class="text-muted">Completed</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Analyst Summary Table (shown when no specific analyst is selected) -->
+{% if not analyst_id %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Analyst Summary — {{ year }}{% if quarter %} Q{{ quarter }}{% endif %}{% if branch_filter %} — {{ Branch[branch_filter].value }}{% endif %}</span>
+        {% if total_summary_pages > 1 %}
+        <small class="text-muted">Page {{ summary_page }} of {{ total_summary_pages }}</small>
+        {% endif %}
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    {% set toggle_dir = 'asc' if sort_by == 'name' and sort_dir == 'desc' else 'desc' %}
+                    <th>
+                        <a href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, sort='name', dir=toggle_dir, **{'resub_type': resub_selected, 'status': status_selected}) }}"
+                           class="text-decoration-none text-dark">
+                            Analyst
+                            {% if sort_by == 'name' %}
+                            <i class="bi bi-caret-{{ 'up' if sort_dir == 'asc' else 'down' }}-fill small"></i>
+                            {% endif %}
+                        </a>
+                    </th>
+                    {% set toggle_dir = 'asc' if sort_by == 'total' and sort_dir == 'desc' else 'desc' %}
+                    <th class="text-center">
+                        <a href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, sort='total', dir=toggle_dir, **{'resub_type': resub_selected, 'status': status_selected}) }}"
+                           class="text-decoration-none text-dark">
+                            Total Assigned
+                            {% if sort_by == 'total' %}
+                            <i class="bi bi-caret-{{ 'up' if sort_dir == 'asc' else 'down' }}-fill small"></i>
+                            {% endif %}
+                        </a>
+                    </th>
+                    {% set toggle_dir = 'asc' if sort_by == 'completed' and sort_dir == 'desc' else 'desc' %}
+                    <th class="text-center">
+                        <a href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, sort='completed', dir=toggle_dir, **{'resub_type': resub_selected, 'status': status_selected}) }}"
+                           class="text-decoration-none text-dark">
+                            Completed
+                            {% if sort_by == 'completed' %}
+                            <i class="bi bi-caret-{{ 'up' if sort_dir == 'asc' else 'down' }}-fill small"></i>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th class="text-center">In Progress</th>
+                    <th class="text-center">Completion Rate</th>
+                    <th class="text-center">
+                        Workflow Status
+                        <small class="text-muted d-block" style="font-size:0.7rem;">(current assignment status)</small>
+                    </th>
+                    <th class="text-center text-danger">
+                        Returned for Correction
+                        <small class="text-muted d-block" style="font-size:0.7rem;">(from Preliminary)</small>
+                    </th>
+                    <th class="text-center text-danger">
+                        Avg / Sample
+                        <small class="text-muted d-block" style="font-size:0.7rem;">(Preliminary)</small>
+                    </th>
+                    <th class="text-center text-danger">
+                        Grade
+                        <small class="text-muted d-block" style="font-size:0.7rem;">(0 / 1 / 2+)</small>
+                    </th>
+                    <th class="text-center text-danger">
+                        Returned by Deputy
+                    </th>
+                    <th class="text-center text-danger">
+                        Returned by HOD
+                    </th>
+                    <th class="text-center">View Detail</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for analyst in analyst_list %}
+                <tr>
+                    <td class="fw-semibold">{{ analyst.name }}</td>
+                    <td class="text-center">{{ analyst.total }}</td>
+                    <td class="text-center">
+                        <span class="badge bg-success">{{ analyst.completed }}</span>
+                    </td>
+                    <td class="text-center">
+                        <span class="badge bg-warning text-dark">{{ analyst.in_progress }}</span>
+                    </td>
+                    <td class="text-center">
+                        {% if analyst.total > 0 %}
+                        {% set pct = (analyst.completed / analyst.total * 100) | round(1) %}
+                        <div class="progress" style="height: 20px; min-width: 80px;">
+                            <div class="progress-bar bg-success" role="progressbar"
+                                 style="width: {{ pct }}%;" aria-valuenow="{{ pct }}"
+                                 aria-valuemin="0" aria-valuemax="100">
+                                {{ pct }}%
+                            </div>
+                        </div>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {# Per-status breakdown badges — assignment-level statuses #}
+                        {% set asc = analyst.assign_status_counts %}
+                        {% if asc %}
+                        <span class="d-inline-flex flex-wrap gap-1 justify-content-center">
+                            {% set asc_colors = {
+                                'ASSIGNED': 'primary',
+                                'IN_PROGRESS': 'info',
+                                'REPORT_SUBMITTED': 'warning',
+                                'UNDER_PRELIMINARY_REVIEW': 'warning',
+                                'UNDER_TECHNICAL_REVIEW': 'warning',
+                                'RETURNED': 'danger',
+                                'ACCEPTED': 'success',
+                                'REJECTED': 'danger',
+                                'COMPLETED': 'success',
+                            } %}
+                            {% set asc_labels = {
+                                'ASSIGNED': 'Assigned',
+                                'IN_PROGRESS': 'In Progress',
+                                'REPORT_SUBMITTED': 'Submitted',
+                                'UNDER_PRELIMINARY_REVIEW': 'Prelim Review',
+                                'UNDER_TECHNICAL_REVIEW': 'Sr. Chemist Review',
+                                'RETURNED': 'Returned',
+                                'ACCEPTED': 'Accepted',
+                                'REJECTED': 'Rejected',
+                                'COMPLETED': 'Completed',
+                            } %}
+                            {% for aname, alabel in asc_labels.items() %}
+                            {% set cnt = asc.get(aname, 0) %}
+                            {% if cnt > 0 %}
+                            <span class="badge bg-{{ asc_colors.get(aname, 'secondary') }}"
+                                  title="{{ alabel }}">
+                                {{ alabel }}: {{ cnt }}
+                            </span>
+                            {% endif %}
+                            {% endfor %}
+                        </span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% set rc = analyst.resub_breakdown.get('preliminary', 0) %}
+                        {% if rc > 0 %}
+                        <span class="badge bg-danger">{{ rc }}</span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="text-center">
+                        <span class="{% if analyst.resub_avg > 0 %}text-danger fw-semibold{% else %}text-muted{% endif %}">
+                            {{ analyst.resub_avg }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        {% if analyst.resub_grade == '0' %}
+                        <span class="badge bg-success">0</span>
+                        {% elif analyst.resub_grade == '1' %}
+                        <span class="badge bg-warning text-dark">1</span>
+                        {% else %}
+                        <span class="badge bg-danger">2+</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% set rd = analyst.resub_breakdown.get('deputy', 0) %}
+                        {% if rd > 0 %}
+                        <span class="badge bg-danger">{{ rd }}</span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% set rh = analyst.resub_breakdown.get('hod', 0) %}
+                        {% if rh > 0 %}
+                        <span class="badge bg-danger">{{ rh }}</span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="text-center">
+                        <a href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, analyst_id=analyst.id, **{'resub_type': resub_selected, 'status': status_selected}) }}"
+                           class="btn btn-outline-secondary btn-sm py-0 px-2">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="12" class="text-center text-muted py-4">No analyst data found for this period.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <!-- Summary table pagination -->
+    {% if total_summary_pages > 1 %}
+    <div class="card-footer">
+        <nav aria-label="Analyst summary pagination" class="d-flex justify-content-center">
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item {% if summary_page <= 1 %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, sort=sort_by, dir=sort_dir, summary_page=summary_page - 1, **{'resub_type': resub_selected, 'status': status_selected}) }}">&laquo;</a>
+                </li>
+                {% for p in range(1, total_summary_pages + 1) %}
+                <li class="page-item {% if p == summary_page %}active{% endif %}">
+                    <a class="page-link" href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, sort=sort_by, dir=sort_dir, summary_page=p, **{'resub_type': resub_selected, 'status': status_selected}) }}">{{ p }}</a>
+                </li>
+                {% endfor %}
+                <li class="page-item {% if summary_page >= total_summary_pages %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, sort=sort_by, dir=sort_dir, summary_page=summary_page + 1, **{'resub_type': resub_selected, 'status': status_selected}) }}">&raquo;</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Detailed Test Breakdown for selected analyst -->
+{% if selected_analyst %}
+{% set a_colors = {
+    'Assigned': 'primary', 'In Progress': 'info',
+    'Report Submitted': 'warning', 'Preliminary Review': 'warning',
+    'Senior Chemist Review': 'warning',
+    'Returned for Correction': 'danger', 'Accepted': 'success',
+    'Rejected': 'danger', 'Completed': 'success',
+} %}
+
+<!-- Resubmissions by Return Stage panel for selected analyst -->
+{% set analyst_has_resubs = selected_analyst.resub_breakdown | length > 0 %}
+<div class="card mb-3">
+    <div class="card-header">
+        <i class="bi bi-person-lines-fill me-1"></i>
+        Analyst Performance Summary — {{ selected_analyst.name }}
+    </div>
+    <div class="card-body py-2">
+        <div class="row g-2">
+            {# Assignment-status counts #}
+            {% set asc = selected_analyst.assign_status_counts %}
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card text-center h-100 border-primary">
+                    <div class="card-body py-2 px-1">
+                        <div class="fs-5 fw-bold text-primary">{{ asc.get('ASSIGNED', 0) }}</div>
+                        <small class="text-muted" style="font-size:0.7rem;">Assigned</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card text-center h-100 border-info">
+                    <div class="card-body py-2 px-1">
+                        <div class="fs-5 fw-bold text-info">{{ asc.get('IN_PROGRESS', 0) }}</div>
+                        <small class="text-muted" style="font-size:0.7rem;">In Progress</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card text-center h-100 border-warning">
+                    <div class="card-body py-2 px-1">
+                        <div class="fs-5 fw-bold text-warning">{{ asc.get('REPORT_SUBMITTED', 0) }}</div>
+                        <small class="text-muted" style="font-size:0.7rem;">Report Submitted</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card text-center h-100 border-warning">
+                    <div class="card-body py-2 px-1">
+                        <div class="fs-5 fw-bold text-warning">{{ asc.get('UNDER_PRELIMINARY_REVIEW', 0) }}</div>
+                        <small class="text-muted" style="font-size:0.7rem;">Preliminary Review</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card text-center h-100 {% if selected_analyst.resub_breakdown.get('preliminary', 0) > 0 %}border-danger{% else %}border-light{% endif %}">
+                    <div class="card-body py-2 px-1">
+                        <div class="fs-5 fw-bold {% if selected_analyst.resub_breakdown.get('preliminary', 0) > 0 %}text-danger{% else %}text-muted{% endif %}">
+                            {{ selected_analyst.resub_breakdown.get('preliminary', 0) }}
+                        </div>
+                        <small class="text-muted" style="font-size:0.7rem;">Returned for Correction</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card text-center h-100 {% if selected_analyst.resub_avg > 0 %}border-danger{% else %}border-light{% endif %}">
+                    <div class="card-body py-2 px-1">
+                        <div class="fs-5 fw-bold {% if selected_analyst.resub_avg > 0 %}text-danger{% else %}text-muted{% endif %}">
+                            {{ selected_analyst.resub_avg }}
+                        </div>
+                        <small class="text-muted" style="font-size:0.7rem;">Avg / Sample (Prelim)</small>
+                        <div class="mt-1">
+                            {% if selected_analyst.resub_grade == '0' %}
+                            <span class="badge bg-success">Grade: 0</span>
+                            {% elif selected_analyst.resub_grade == '1' %}
+                            <span class="badge bg-warning text-dark">Grade: 1</span>
+                            {% else %}
+                            <span class="badge bg-danger">Grade: 2+</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card text-center h-100 border-success">
+                    <div class="card-body py-2 px-1">
+                        <div class="fs-5 fw-bold text-success">{{ asc.get('ACCEPTED', 0) }}</div>
+                        <small class="text-muted" style="font-size:0.7rem;">Accepted</small>
+                    </div>
+                </div>
+            </div>
+            {# Sample-level status counts for deputy/hod stages #}
+            {% set sc = selected_analyst.status_counts %}
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card text-center h-100 border-warning">
+                    <div class="card-body py-2 px-1">
+                        <div class="fs-5 fw-bold text-warning">{{ sc.get('DEPUTY_REVIEW', 0) }}</div>
+                        <small class="text-muted" style="font-size:0.7rem;">Deputy Review</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card text-center h-100 {% if selected_analyst.resub_breakdown.get('deputy', 0) > 0 %}border-danger{% else %}border-light{% endif %}">
+                    <div class="card-body py-2 px-1">
+                        <div class="fs-5 fw-bold {% if selected_analyst.resub_breakdown.get('deputy', 0) > 0 %}text-danger{% else %}text-muted{% endif %}">
+                            {{ selected_analyst.resub_breakdown.get('deputy', 0) }}
+                        </div>
+                        <small class="text-muted" style="font-size:0.7rem;">Returned by Deputy</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card text-center h-100 border-warning">
+                    <div class="card-body py-2 px-1">
+                        <div class="fs-5 fw-bold text-warning">{{ sc.get('HOD_REVIEW', 0) }}</div>
+                        <small class="text-muted" style="font-size:0.7rem;">HOD Review</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card text-center h-100 {% if selected_analyst.resub_breakdown.get('hod', 0) > 0 %}border-danger{% else %}border-light{% endif %}">
+                    <div class="card-body py-2 px-1">
+                        <div class="fs-5 fw-bold {% if selected_analyst.resub_breakdown.get('hod', 0) > 0 %}text-danger{% else %}text-muted{% endif %}">
+                            {{ selected_analyst.resub_breakdown.get('hod', 0) }}
+                        </div>
+                        <small class="text-muted" style="font-size:0.7rem;">Returned by HOD</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card text-center h-100 border-success">
+                    <div class="card-body py-2 px-1">
+                        <div class="fs-5 fw-bold text-success">{{ sc.get('CERTIFIED', 0) }}</div>
+                        <small class="text-muted" style="font-size:0.7rem;">Certified</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card text-center h-100 border-success">
+                    <div class="card-body py-2 px-1">
+                        <div class="fs-5 fw-bold text-success">{{ asc.get('COMPLETED', 0) }}</div>
+                        <small class="text-muted" style="font-size:0.7rem;">Completed</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 class="mb-0">
+            <i class="bi bi-person me-1"></i>{{ selected_analyst.name }} — {{ selected_analyst.total }} test(s)
+            <span class="badge bg-success ms-1">{{ selected_analyst.completed }} completed</span>
+            <span class="badge bg-warning text-dark ms-1">{{ selected_analyst.in_progress }} in progress</span>
+        </h6>
+        <a href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, **{'resub_type': resub_selected, 'status': status_selected}) }}"
+           class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Back to Summary
+        </a>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+            <thead>
+                <tr>
+                    {% set td = 'asc' if detail_sort == 'lab' and detail_dir == 'desc' else 'desc' %}
+                    <th>
+                        <a href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, analyst_id=analyst_id, detail_sort='lab', detail_dir=td, detail_page=1, **{'resub_type': resub_selected, 'status': status_selected}) }}"
+                           class="text-decoration-none text-dark">
+                            Lab Number
+                            {% if detail_sort == 'lab' %}<i class="bi bi-caret-{{ 'up' if detail_dir == 'asc' else 'down' }}-fill small"></i>{% endif %}
+                        </a>
+                    </th>
+                    {% set td = 'asc' if detail_sort == 'sample' and detail_dir == 'desc' else 'desc' %}
+                    <th>
+                        <a href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, analyst_id=analyst_id, detail_sort='sample', detail_dir=td, detail_page=1, **{'resub_type': resub_selected, 'status': status_selected}) }}"
+                           class="text-decoration-none text-dark">
+                            Sample Name
+                            {% if detail_sort == 'sample' %}<i class="bi bi-caret-{{ 'up' if detail_dir == 'asc' else 'down' }}-fill small"></i>{% endif %}
+                        </a>
+                    </th>
+                    {% set td = 'asc' if detail_sort == 'lab_type' and detail_dir == 'desc' else 'desc' %}
+                    <th>
+                        <a href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, analyst_id=analyst_id, detail_sort='lab_type', detail_dir=td, detail_page=1, **{'resub_type': resub_selected, 'status': status_selected}) }}"
+                           class="text-decoration-none text-dark">
+                            Laboratory
+                            {% if detail_sort == 'lab_type' %}<i class="bi bi-caret-{{ 'up' if detail_dir == 'asc' else 'down' }}-fill small"></i>{% endif %}
+                        </a>
+                    </th>
+                    {% set td = 'asc' if detail_sort == 'test' and detail_dir == 'desc' else 'desc' %}
+                    <th>
+                        <a href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, analyst_id=analyst_id, detail_sort='test', detail_dir=td, detail_page=1, **{'resub_type': resub_selected, 'status': status_selected}) }}"
+                           class="text-decoration-none text-dark">
+                            Test Name
+                            {% if detail_sort == 'test' %}<i class="bi bi-caret-{{ 'up' if detail_dir == 'asc' else 'down' }}-fill small"></i>{% endif %}
+                        </a>
+                    </th>
+                    {% set td = 'asc' if detail_sort == 'status' and detail_dir == 'desc' else 'desc' %}
+                    <th>
+                        <a href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, analyst_id=analyst_id, detail_sort='status', detail_dir=td, detail_page=1, **{'resub_type': resub_selected, 'status': status_selected}) }}"
+                           class="text-decoration-none text-dark">
+                            Assignment Status
+                            {% if detail_sort == 'status' %}<i class="bi bi-caret-{{ 'up' if detail_dir == 'asc' else 'down' }}-fill small"></i>{% endif %}
+                        </a>
+                    </th>
+                    <th class="text-center">Sample Workflow Status</th>
+                    {% set td = 'asc' if detail_sort == 'assigned' and detail_dir == 'desc' else 'desc' %}
+                    <th>
+                        <a href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, analyst_id=analyst_id, detail_sort='assigned', detail_dir=td, detail_page=1, **{'resub_type': resub_selected, 'status': status_selected}) }}"
+                           class="text-decoration-none text-dark">
+                            Assigned
+                            {% if detail_sort == 'assigned' %}<i class="bi bi-caret-{{ 'up' if detail_dir == 'asc' else 'down' }}-fill small"></i>{% endif %}
+                        </a>
+                    </th>
+                    {% set td = 'asc' if detail_sort == 'completed_date' and detail_dir == 'desc' else 'desc' %}
+                    <th>
+                        <a href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, analyst_id=analyst_id, detail_sort='completed_date', detail_dir=td, detail_page=1, **{'resub_type': resub_selected, 'status': status_selected}) }}"
+                           class="text-decoration-none text-dark">
+                            Completed
+                            {% if detail_sort == 'completed_date' %}<i class="bi bi-caret-{{ 'up' if detail_dir == 'asc' else 'down' }}-fill small"></i>{% endif %}
+                        </a>
+                    </th>
+                    <th class="text-center">
+                        <span class="text-danger">Returned for Correction</span>
+                        <small class="text-muted d-block" style="font-size:0.7rem;">(Preliminary)</small>
+                    </th>
+                    <th class="text-center text-danger">Returned by Deputy</th>
+                    <th class="text-center text-danger">Returned by HOD</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% set sample_status_colors = {
+                    'Registered': 'secondary', 'Assigned': 'primary', 'In Progress': 'info',
+                    'Report Submitted': 'warning', 'Preliminary Review': 'warning',
+                    'Senior Chemist Review': 'warning', 'Returned for Correction': 'danger',
+                    'Accepted': 'success', 'Deputy Review': 'warning',
+                    'Returned by Deputy': 'danger', 'Certificate Preparation': 'info',
+                    'HOD Review': 'warning', 'Returned by HOD': 'danger',
+                    'Certified': 'success', 'Rejected': 'danger', 'Completed': 'success',
+                } %}
+                {% for a in detail_items %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('samples.detail', sample_id=a.sample.id) }}"
+                           class="text-decoration-none fw-semibold">{{ a.sample.lab_number }}</a>
+                        {% if a.sample.is_accredited %}
+                        <i class="bi bi-patch-check-fill text-success ms-1"
+                           title="Accredited" data-bs-toggle="tooltip"></i>
+                        {% endif %}
+                    </td>
+                    <td>{{ a.sample.sample_name }}</td>
+                    <td><span class="badge bg-info text-dark">{{ a.sample.sample_type.value }}</span></td>
+                    <td>{{ a.test_name }}</td>
+                    <td>
+                        <span class="badge bg-{{ a_colors.get(a.status.value, 'secondary') }}">
+                            {{ a.status.value }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        {% if a.sample.status %}
+                        <span class="badge bg-{{ sample_status_colors.get(a.sample.status.value, 'secondary') }}">
+                            {{ a.sample.status.value }}
+                        </span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>{{ a.assigned_date.strftime('%d %b %Y') if a.assigned_date else '—' }}</td>
+                    <td>{{ a.date_completed.strftime('%d %b %Y') if a.date_completed else '—' }}</td>
+                    {# Return counts broken out by stage — always visible #}
+                    {% set bdown = assignment_type_breakdowns.get(a.id, {}) %}
+                    <td class="text-center">
+                        {% set prelim_cnt = bdown.get('preliminary', 0) %}
+                        {% if prelim_cnt > 0 %}
+                        <span class="badge bg-danger">{{ prelim_cnt }}</span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% set deputy_cnt = bdown.get('deputy', 0) %}
+                        {% if deputy_cnt > 0 %}
+                        <span class="badge bg-danger">{{ deputy_cnt }}</span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% set hod_cnt = bdown.get('hod', 0) %}
+                        {% if hod_cnt > 0 %}
+                        <span class="badge bg-danger">{{ hod_cnt }}</span>
+                        {% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="11" class="text-center text-muted py-3">No tests found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <!-- Detail table pagination -->
+    {% if detail_total_pages > 1 %}
+    <div class="card-footer d-flex justify-content-between align-items-center">
+        <small class="text-muted">
+            Page {{ detail_page }} of {{ detail_total_pages }}
+            ({{ selected_analyst.total }} test{{ 's' if selected_analyst.total != 1 else '' }} total)
+        </small>
+        <nav aria-label="Detail pagination">
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item {% if detail_page <= 1 %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, analyst_id=analyst_id, detail_sort=detail_sort, detail_dir=detail_dir, detail_page=detail_page - 1, **{'resub_type': resub_selected, 'status': status_selected}) }}">&laquo;</a>
+                </li>
+                {% for p in range(1, detail_total_pages + 1) %}
+                {% if p == 1 or p == detail_total_pages or (p >= detail_page - 2 and p <= detail_page + 2) %}
+                <li class="page-item {% if p == detail_page %}active{% endif %}">
+                    <a class="page-link" href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, analyst_id=analyst_id, detail_sort=detail_sort, detail_dir=detail_dir, detail_page=p, **{'resub_type': resub_selected, 'status': status_selected}) }}">{{ p }}</a>
+                </li>
+                {% elif p == detail_page - 3 or p == detail_page + 3 %}
+                <li class="page-item disabled"><span class="page-link">…</span></li>
+                {% endif %}
+                {% endfor %}
+                <li class="page-item {% if detail_page >= detail_total_pages %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('main.analyst_report', year=year, quarter=quarter, branch=branch_filter, analyst_id=analyst_id, detail_sort=detail_sort, detail_dir=detail_dir, detail_page=detail_page + 1, **{'resub_type': resub_selected, 'status': status_selected}) }}">&raquo;</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Quick links -->
+<div class="mt-3 d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('main.pharma_report', year=year) }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-capsule me-1"></i>Pharm Report
+    </a>
+    <a href="{{ url_for('main.alcohol_report', year=year) }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-cup me-1"></i>Alcohol Report
+    </a>
+</div>
+
+<script>
+function handleResubAllChange(checkbox) {
+    const typeChecks = document.querySelectorAll('.resub-type-check');
+    if (checkbox.checked) {
+        typeChecks.forEach(c => { c.checked = false; c.disabled = true; });
+    } else {
+        typeChecks.forEach(c => { c.disabled = false; });
+    }
+}
+
+function handleResubTypeChange() {
+    const allCheck = document.getElementById('resub_all');
+    const typeChecks = document.querySelectorAll('.resub-type-check');
+    const anyChecked = Array.from(typeChecks).some(c => c.checked);
+    if (anyChecked) {
+        allCheck.checked = false;
+    }
+}
+
+function handleStatusAllChange(checkbox) {
+    const typeChecks = document.querySelectorAll('.status-type-check');
+    if (checkbox.checked) {
+        typeChecks.forEach(c => { c.checked = false; c.disabled = true; });
+    } else {
+        typeChecks.forEach(c => { c.disabled = false; });
+    }
+}
+
+function handleStatusTypeChange() {
+    const allCheck = document.getElementById('status_all');
+    const typeChecks = document.querySelectorAll('.status-type-check');
+    const anyChecked = Array.from(typeChecks).some(c => c.checked);
+    if (anyChecked) {
+        allCheck.checked = false;
+    }
+}
+
+// On page load: enforce consistent state
+(function () {
+    const resubAllCheck = document.getElementById('resub_all');
+    const resubTypeChecks = document.querySelectorAll('.resub-type-check');
+    if (resubAllCheck && resubAllCheck.checked) {
+        resubTypeChecks.forEach(c => { c.disabled = true; });
+    }
+
+    const statusAllCheck = document.getElementById('status_all');
+    const statusTypeChecks = document.querySelectorAll('.status-type-check');
+    if (statusAllCheck && statusAllCheck.checked) {
+        statusTypeChecks.forEach(c => { c.disabled = true; });
+    }
+})();
+</script>
+{% endblock %}

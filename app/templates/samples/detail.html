@@ -1,0 +1,1767 @@
+{% extends "base.html" %}
+{% block title %}{{ sample.lab_number }} - DGC SMS{% endblock %}
+
+{% block content %}
+{% set status_colors = {
+    'Registered': 'secondary',
+    'Assigned': 'primary',
+    'In Progress': 'info',
+    'Report Submitted': 'warning',
+    'Preliminary Review': 'warning',
+    'Senior Chemist Review': 'warning',
+    'Returned for Correction': 'danger',
+    'Accepted': 'success',
+    'Deputy Review': 'info',
+    'Returned by Deputy': 'danger',
+    'Certificate Preparation': 'info',
+    'HOD Review': 'info',
+    'Returned by HOD': 'danger',
+    'Certified': 'success',
+    'Rejected': 'danger',
+    'Completed': 'success',
+} %}
+{% set sv = sample.status.value %}
+
+<div class="page-header">
+    <div>
+        <h2 class="mb-0"><i class="bi bi-clipboard2-data me-2"></i>{{ sample.lab_number }}</h2>
+        <p class="text-muted mb-0 mt-1">{{ sample.sample_name }}</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+        <span class="badge bg-{{ status_colors.get(sv, 'secondary') }}" style="font-size:.85rem; padding:.4em .65em;">
+            {{ sv }}
+        </span>
+        {% if sample.is_accredited %}
+        <span class="badge bg-success" style="font-size:.85rem; padding:.4em .65em;" title="Accredited sample" data-bs-toggle="tooltip">
+            <i class="bi bi-patch-check-fill me-1"></i>Accredited
+        </span>
+        {% elif sample.is_accredited is false %}
+        <span class="badge bg-secondary" style="font-size:.85rem; padding:.4em .65em;" title="Not accredited" data-bs-toggle="tooltip">
+            <i class="bi bi-patch-exclamation me-1"></i>Not Accredited
+        </span>
+        {% endif %}
+        {% if current_user.has_any_role(Role.OFFICER, Role.ADMIN, Role.HOD, Role.SENIOR_CHEMIST) or current_user.has_permission(Permission.EDIT_SAMPLE) or current_user.id == sample.uploaded_by %}
+        <a href="{{ url_for('samples.edit', sample_id=sample.id) }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-pencil me-1"></i>Edit
+        </a>
+        {% endif %}
+        {# Explicit ASSIGN_SAMPLE permission overrides role restrictions #}
+        {% if current_user.has_permission(Permission.ASSIGN_SAMPLE) or current_user.is_branch_head() or current_user.has_role(Role.ADMIN) %}
+        <a href="{{ url_for('samples.assign', sample_id=sample.id) }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-person-plus me-1"></i>Assign
+        </a>
+        {% endif %}
+        {% if current_user.has_any_role(Role.SENIOR_CHEMIST, Role.DEPUTY, Role.OFFICER, Role.GOVT_CHEMIST_ASSISTANT) %}
+            {% set pending_delete = sample.delete_requests.filter_by(status='pending').first() %}
+            {% if pending_delete %}
+            <span class="badge bg-warning text-dark" title="Deletion request pending HOD approval">
+                <i class="bi bi-hourglass-split me-1"></i>Deletion Pending
+            </span>
+            {% else %}
+            <a href="{{ url_for('samples.request_sample_delete', sample_id=sample.id) }}"
+               class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-trash3 me-1"></i>Request Deletion
+            </a>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+
+<!-- Workflow action banners -->
+{% if can_submit_to_deputy and (current_user.has_permission(Permission.TECHNICAL_REVIEW) or current_user.is_branch_head() or current_user.has_role(Role.ADMIN)) %}
+<div class="alert alert-info d-flex justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <i class="bi bi-check-circle me-1"></i>
+        <strong>All reports accepted.</strong> Submit to Deputy Government Chemist for review.
+        {% if sample.sample_type.value == 'Pharmaceutical' %}
+        <br><small class="text-muted">A summary report is required for pharmaceutical samples.</small>
+        {% endif %}
+    </div>
+    <a href="{{ url_for('samples.submit_to_deputy', sample_id=sample.id) }}" class="btn btn-primary btn-sm text-nowrap">
+        <i class="bi bi-send me-1"></i>Submit to Deputy
+    </a>
+</div>
+{% elif sv == 'Deputy Review' and (current_user.has_permission(Permission.DEPUTY_REVIEW) or current_user.has_any_role(Role.DEPUTY, Role.HOD, Role.ADMIN)) %}
+<div class="alert alert-info d-flex justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <i class="bi bi-clipboard-check me-1"></i>
+        <strong>Awaiting Deputy Government Chemist review.</strong>
+    </div>
+    <a href="{{ url_for('samples.deputy_review', sample_id=sample.id) }}" class="btn btn-primary btn-sm text-nowrap">
+        <i class="bi bi-clipboard-check me-1"></i>Review Submission
+    </a>
+</div>
+{% elif sv == 'Returned by Deputy' and (current_user.has_permission(Permission.TECHNICAL_REVIEW) or current_user.is_branch_head() or current_user.has_role(Role.ADMIN)) %}
+<div class="alert alert-warning d-flex justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <i class="bi bi-exclamation-triangle me-1"></i>
+        <strong>Submission returned by Deputy Government Chemist.</strong>
+        {% if sample.deputy_review_comments %}
+        <br><small>Comments: {{ sample.deputy_review_comments }}</small>
+        {% endif %}
+    </div>
+    <a href="{{ url_for('samples.submit_to_deputy', sample_id=sample.id) }}" class="btn btn-warning btn-sm text-nowrap">
+        <i class="bi bi-arrow-repeat me-1"></i>Resubmit to Deputy
+    </a>
+</div>
+{% elif sv == 'Certificate Preparation' and (current_user.has_permission(Permission.DEPUTY_REVIEW) or current_user.has_any_role(Role.DEPUTY, Role.HOD, Role.ADMIN)) %}
+<div class="alert alert-info d-flex justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <i class="bi bi-file-earmark-medical me-1"></i>
+        <strong>Prepare Certificate of Analysis.</strong>
+    </div>
+    <a href="{{ url_for('samples.prepare_certificate', sample_id=sample.id) }}" class="btn btn-primary btn-sm text-nowrap">
+        <i class="bi bi-file-earmark-medical me-1"></i>Prepare Certificate
+    </a>
+</div>
+{% elif sv == 'HOD Review' and (current_user.has_permission(Permission.HOD_REVIEW) or current_user.has_any_role(Role.HOD, Role.ADMIN)) %}
+<div class="alert alert-info d-flex justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <i class="bi bi-pen me-1"></i>
+        <strong>Certificate awaiting Government Chemist review and signing.</strong>
+    </div>
+    <a href="{{ url_for('samples.hod_review', sample_id=sample.id) }}" class="btn btn-success btn-sm text-nowrap">
+        <i class="bi bi-pen me-1"></i>Review &amp; Sign
+    </a>
+</div>
+{% elif sv == 'Returned by HOD' and (current_user.has_permission(Permission.DEPUTY_REVIEW) or current_user.has_any_role(Role.DEPUTY, Role.HOD, Role.ADMIN)) %}
+<div class="alert alert-warning d-flex justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <i class="bi bi-exclamation-triangle me-1"></i>
+        <strong>Certificate returned by Government Chemist for correction.</strong>
+        {% if sample.hod_review_comments %}
+        <br><small>Comments: {{ sample.hod_review_comments }}</small>
+        {% endif %}
+    </div>
+    <a href="{{ url_for('samples.prepare_certificate', sample_id=sample.id) }}" class="btn btn-warning btn-sm text-nowrap">
+        <i class="bi bi-pencil me-1"></i>Revise Certificate
+    </a>
+</div>
+{% elif sv == 'Certified' %}
+<div class="alert alert-success mb-4">
+    <i class="bi bi-patch-check-fill me-1"></i>
+    <strong>Sample analysis completed.</strong>
+    Certificate signed by {{ sample.certifier.full_name if sample.certifier else 'Government Chemist' }}
+    {% if sample.certified_at %}on {{ sample.certified_at.strftime('%d %b %Y %H:%M') }}{% endif %}.
+    {% if sample.coa_version and sample.coa_version > 1 %}
+    <span class="badge bg-warning text-dark ms-2">Re-issued v{{ sample.coa_version }}</span>
+    {% endif %}
+    {% if sample.marked_oos_at %}
+    <span class="badge bg-danger ms-2">Out of Spec</span>
+    <br><small>
+        Marked by {{ sample.oos_marker.full_name if sample.oos_marker else 'N/A' }}
+        on {{ sample.marked_oos_at.strftime('%d %b %Y %H:%M') }}.
+        {% if sample.oos_mark_reason %}Reason: {{ sample.oos_mark_reason }}{% endif %}
+    </small>
+    {% endif %}
+    {% if current_user.has_any_role(Role.HOD, Role.ADMIN) or current_user.has_permission(Permission.COA_DECERTIFY_REISSUE) %}
+    <div class="mt-2 d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('samples.coa_decertify', sample_id=sample.id) }}"
+           class="btn btn-danger btn-sm">
+            <i class="bi bi-shield-x me-1"></i>Decertify COA
+        </a>
+        <a href="{{ url_for('samples.coa_reissue', sample_id=sample.id) }}"
+           class="btn btn-warning btn-sm">
+            <i class="bi bi-patch-check me-1"></i>Re-Issue Certificate
+        </a>
+        <a href="{{ url_for('samples.invoice_create', sample_id=sample.id) }}"
+           class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-receipt me-1"></i>Generate Invoice
+        </a>
+    </div>
+    {% endif %}
+    {% if not sample.marked_oos_at and (
+            current_user.has_any_role(Role.HOD, Role.DEPUTY, Role.SENIOR_CHEMIST, Role.ADMIN)
+            or current_user.has_permission(Permission.OOS_FLAG)) %}
+    <div class="mt-2 d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('samples.mark_out_of_spec', sample_id=sample.id) }}"
+           class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-exclamation-octagon me-1"></i>Mark Out of Spec
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Pending Preliminary Review alert — shown whenever ≥1 assignment is still
+     at REPORT_SUBMITTED, even if the overall sample status has been overridden
+     by a later-stage assignment (e.g. UNDER_TECHNICAL_REVIEW). -->
+{% set prelim_pending_assignments = assignments | selectattr('status.value', 'equalto', 'Report Submitted') | list %}
+{% if prelim_pending_assignments and (
+        current_user.has_any_role(Role.OFFICER, Role.SENIOR_CHEMIST, Role.DEPUTY, Role.HOD, Role.ADMIN)
+        or current_user.has_permission(Permission.PRELIMINARY_REVIEW)
+        or current_user.id == sample.uploaded_by) %}
+<div class="alert alert-warning mb-4">
+    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+        <div>
+            <i class="bi bi-eye me-1"></i>
+            <strong>{{ prelim_pending_assignments | length }} test report{{ 's' if prelim_pending_assignments | length != 1 else '' }} awaiting preliminary review:</strong>
+            <ul class="mb-0 mt-2">
+                {% for a in prelim_pending_assignments %}
+                <li class="mb-1">
+                    <span class="fw-semibold">{{ a.test_name }}</span>
+                    {% if a.chemist %}<span class="text-muted"> — {{ a.chemist.full_name }}</span>{% endif %}
+                    {% if a.report_submitted_at %}
+                    <span class="text-muted small ms-1">(submitted {{ a.report_submitted_at.strftime('%d %b %Y') }})</span>
+                    {% endif %}
+                    <a href="{{ url_for('samples.preliminary_review', assignment_id=a.id) }}"
+                       class="btn btn-sm btn-warning ms-2 py-0 px-2" style="font-size:.78rem;">
+                        <i class="bi bi-clipboard-check me-1"></i>Review
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- HOD Workflow Return Button -->
+{% set non_returnable_statuses = ['Registered', 'Certified', 'Completed', 'Rejected'] %}
+{% if (current_user.has_role(Role.HOD) or current_user.has_permission(Permission.HOD_WORKFLOW_RETURN) or current_user.has_role(Role.ADMIN)) and sv not in non_returnable_statuses %}
+<div class="alert alert-warning d-flex justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <i class="bi bi-arrow-return-left me-1"></i>
+        <strong>HOD Return:</strong> Return this report to a previous workflow stage.
+    </div>
+    <button type="button" class="btn btn-warning btn-sm text-nowrap"
+            data-bs-toggle="modal" data-bs-target="#hodReturnModal">
+        <i class="bi bi-arrow-return-left me-1"></i>Return Report
+    </button>
+</div>
+{% endif %}
+
+<!-- Admin Unreject Button (only shown when sample is Rejected) -->
+{% if current_user.has_role(Role.ADMIN) and sv == 'Rejected' %}
+<div class="alert alert-danger d-flex justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <i class="bi bi-x-circle me-1"></i>
+        <strong>Rejected:</strong> This sample has been rejected. As Admin, you can remove the rejected status and return it to Deputy Review.
+    </div>
+    <button type="button" class="btn btn-outline-danger btn-sm text-nowrap"
+            data-bs-toggle="modal" data-bs-target="#unrejectModal">
+        <i class="bi bi-arrow-counterclockwise me-1"></i>Remove Reject Status
+    </button>
+</div>
+{% endif %}
+
+
+<div class="row g-3 mb-4">
+    <div class="col-md-8">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="mb-0">Sample Information</h5></div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-sm-6">
+                        <dl class="mb-0">
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Lab Number</dt>
+                            <dd class="fw-semibold mb-3">{{ sample.lab_number }}</dd>
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Sample Name</dt>
+                            <dd class="mb-3">{{ sample.sample_name }}</dd>
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Type</dt>
+                            <dd class="mb-3"><span class="badge bg-info text-dark">{{ sample.sample_type.value }}</span></dd>
+                            {% if sample.quantity %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Quantity</dt>
+                            <dd class="mb-3">{{ sample.quantity }}</dd>
+                            {% endif %}
+                            {% if sample.source %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">{% if sample.sample_type.name == 'TOXICOLOGY' %}Hospital{% else %}Source{% endif %}</dt>
+                            <dd class="mb-0">{{ sample.source }}</dd>
+                            {% endif %}
+                            {% if sample.api %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">API</dt>
+                            <dd class="mb-0">{{ sample.api }}</dd>
+                            {% endif %}
+                            {% if sample.lot_number %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Lot Number</dt>
+                            <dd class="mb-0">{{ sample.lot_number }}</dd>
+                            {% endif %}
+                            {% if sample.expiration_date %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Expiration Date</dt>
+                            <dd class="mb-0">{{ sample.expiration_date.strftime('%d %b %Y') }}</dd>
+                            {% endif %}
+                            {% if sample.batch_lot_number %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Batch / Lot Number</dt>
+                            <dd class="mb-0">{{ sample.batch_lot_number }}</dd>
+                            {% endif %}
+                            {% if sample.toxicology_sample_type_name %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Sample Type</dt>
+                            <dd class="mb-0">{{ sample.toxicology_sample_type_name }}</dd>
+                            {% endif %}
+                            {% if sample.formulation_type %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Formulation</dt>
+                            <dd class="mb-0">{{ sample.formulation_type }}</dd>
+                            {% endif %}
+                            {% if sample.manufacturer %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Manufacturer</dt>
+                            <dd class="mb-0">{{ sample.manufacturer }}</dd>
+                            {% endif %}
+                            {% if sample.active_ingredient %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">API (Active Ingredient)</dt>
+                            <dd class="mb-0">
+                                {% for api in sample.active_ingredient.split(',') if api.strip() %}
+                                <span class="badge bg-secondary me-1">{{ api.strip() }}</span>
+                                {% endfor %}
+                            </dd>
+                            {% endif %}
+                        </dl>
+                    </div>
+                    <div class="col-sm-6">
+                        <dl class="mb-0">
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Date Received</dt>
+                            <dd class="mb-3">{{ sample.date_received.strftime('%d %b %Y') }}</dd>
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Date Registered</dt>
+                            <dd class="mb-3">
+                                {{ sample.date_registered.strftime('%d %b %Y %H:%M') }}
+                                {% if pending_backdate %}
+                                <span class="badge bg-warning text-dark ms-2" style="font-size:.68rem;"
+                                      title="Back-date requested by {{ pending_backdate.requester.full_name if pending_backdate.requester else 'Unknown' }} — proposed: {{ pending_backdate.proposed_date[:10] }}">
+                                    <i class="bi bi-hourglass-split me-1"></i>Back-date pending
+                                </span>
+                                {% elif current_user.has_any_role(Role.OFFICER, Role.SENIOR_CHEMIST, Role.ADMIN, Role.HOD, Role.DEPUTY) %}
+                                <a href="{{ url_for('samples.request_backdate', sample_id=sample.id) }}"
+                                   class="btn btn-outline-warning btn-sm ms-2" style="font-size:.7rem; padding:.15em .5em;"
+                                   title="Request to change the registration date">
+                                    <i class="bi bi-calendar-event me-1"></i>Request Back-Date
+                                </a>
+                                {% endif %}
+                            </dd>
+                            {% if sample.expected_report_date %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Expected Report Date</dt>
+                            <dd class="mb-3">
+                                {{ sample.expected_report_date.strftime('%d %b %Y') }}
+                                {% if sv not in ['Certified', 'Completed', 'Rejected'] %}
+                                    {% set days_left = (sample.expected_report_date - today_date).days if today_date else none %}
+                                    {% if days_left is not none and days_left <= 0 %}
+                                    <span class="badge bg-danger ms-1" style="font-size:.68rem;"><i class="bi bi-exclamation-circle me-1"></i>Due Today / Overdue</span>
+                                    {% elif days_left is not none and days_left == 1 %}
+                                    <span class="badge bg-warning text-dark ms-1" style="font-size:.68rem;"><i class="bi bi-clock me-1"></i>Due Tomorrow</span>
+                                    {% elif days_left is not none and days_left <= 3 %}
+                                    <span class="badge bg-info ms-1" style="font-size:.68rem;"><i class="bi bi-calendar-event me-1"></i>{{ days_left }} days left</span>
+                                    {% endif %}
+                                {% endif %}
+                            </dd>
+                            {% endif %}
+                            {% if sample.parish %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Parish</dt>
+                            <dd class="mb-3">{{ sample.parish }}</dd>
+                            {% endif %}
+                            {% if sample.patient_name %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Patient Name</dt>
+                            <dd class="mb-3">{{ sample.patient_name }}</dd>
+                            {% endif %}
+                            {% if sample.patient_gender %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Patient Gender</dt>
+                            <dd class="mb-3">{{ sample.patient_gender }}</dd>
+                            {% endif %}
+                            {% if sample.doctors_name %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Doctor's Name</dt>
+                            <dd class="mb-3">{{ sample.doctors_name }}</dd>
+                            {% endif %}
+                            {% if sample.registration_docket_no %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Registration/Docket No.</dt>
+                            <dd class="mb-3">{{ sample.registration_docket_no }}</dd>
+                            {% endif %}
+                            {% if sample.ward_clinic %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Ward/Clinic</dt>
+                            <dd class="mb-3">{{ sample.ward_clinic }}</dd>
+                            {% endif %}
+                            {% if sample.test_requested %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Test Requested</dt>
+                            <dd class="mb-3">{{ sample.test_requested }}</dd>
+                            {% endif %}
+                            {% if sample.diagnosis_indicated %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Diagnosis Indicated</dt>
+                            <dd class="mb-3">{{ sample.diagnosis_indicated }}</dd>
+                            {% endif %}
+                            <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Registered By</dt>
+                            <dd class="mb-0">{{ sample.uploaded_by_user.full_name if sample.uploaded_by_user else 'Unknown' }}</dd>
+                        </dl>
+                    </div>
+                    {% if sample.description %}
+                    <div class="col-12">
+                        <dt class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Description</dt>
+                        <dd class="mb-0">{{ sample.description }}</dd>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header"><h5 class="mb-0">Submission Form</h5></div>
+            <div class="card-body d-flex flex-column align-items-center justify-content-center text-center py-4">
+                {% if sample.scanned_file %}
+                <i class="bi bi-file-earmark-text text-primary mb-3" style="font-size:3rem;"></i>
+                <p class="mb-3" style="font-size:.875rem;">{{ sample.scanned_file_original_name }}</p>
+                <div class="d-flex gap-2">
+                    {% set ext = sample.scanned_file_original_name.rsplit('.', 1)[-1].lower() if sample.scanned_file_original_name else '' %}
+                    {% if ext in ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'] %}
+                    <a href="{{ url_for('main.preview_file', filename=sample.scanned_file) }}"
+                       target="_blank" class="btn btn-outline-info btn-sm">
+                        <i class="bi bi-eye me-1"></i>Preview
+                    </a>
+                    {% elif ext in ['doc', 'docx'] %}
+                    <a href="{{ url_for('main.preview_docx_as_pdf', filename=sample.scanned_file) }}"
+                       target="_blank" class="btn btn-outline-info btn-sm">
+                        <i class="bi bi-eye me-1"></i>Preview
+                    </a>
+                    {% elif ext in ['xls', 'xlsx'] %}
+                    <a href="{{ url_for('main.preview_file', filename=sample.scanned_file) }}"
+                       target="_blank" class="btn btn-outline-info btn-sm">
+                        <i class="bi bi-eye me-1"></i>Preview
+                    </a>
+                    {% endif %}
+                    <a href="{{ url_for('samples.download_file', filename=sample.scanned_file) }}"
+                       class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-download me-1"></i>Download
+                    </a>
+                </div>
+                {% else %}
+                <i class="bi bi-file-earmark-x text-muted mb-3" style="font-size:3rem;"></i>
+                <p class="mb-0 text-muted" style="font-size:.875rem;">No document uploaded</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Sample Images -->
+        {% set _can_manage_images = current_user.has_permission(Permission.ADD_SUPPORTING_DOCUMENT) or current_user.has_any_role(Role.OFFICER, Role.ADMIN, Role.HOD, Role.DEPUTY, Role.SENIOR_CHEMIST, Role.GOVT_CHEMIST_ASSISTANT) or current_user.id == sample.uploaded_by %}
+        <div class="card" id="sample-images">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-images me-2"></i>Sample Images</h5>
+            </div>
+            <div class="card-body">
+                {% if sample_images %}
+                <div class="row g-2 mb-2">
+                    {% for img in sample_images %}
+                    <div class="col-6">
+                        <div class="position-relative">
+                            <a href="{{ url_for('main.preview_file', filename=img.file_path) }}"
+                               target="_blank" title="{{ img.caption or img.original_name }}">
+                                <img src="{{ url_for('main.preview_file', filename=img.file_path) }}"
+                                     alt="{{ img.caption or img.original_name }}"
+                                     class="img-fluid rounded border"
+                                     style="width:100%; height:110px; object-fit:cover;">
+                            </a>
+                            {% if _can_manage_images %}
+                            <form method="POST"
+                                  action="{{ url_for('samples.delete_sample_image', sample_id=sample.id, image_id=img.id) }}"
+                                  class="position-absolute top-0 end-0 m-1"
+                                  onsubmit="return confirm('Remove this image?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-danger btn-sm py-0 px-1"
+                                        title="Remove image"><i class="bi bi-x-lg"></i></button>
+                            </form>
+                            {% endif %}
+                        </div>
+                        {% if img.caption %}
+                        <p class="text-muted text-truncate mb-0 mt-1" style="font-size:.75rem;"
+                           title="{{ img.caption }}">{{ img.caption }}</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-3">
+                    <i class="bi bi-image d-block mb-2" style="font-size:2rem;"></i>
+                    <span style="font-size:.85rem;">No sample images uploaded yet.</span>
+                </div>
+                {% endif %}
+
+                {% if _can_manage_images %}
+                <form method="POST"
+                      action="{{ url_for('samples.upload_sample_image', sample_id=sample.id) }}"
+                      enctype="multipart/form-data" class="mt-2">
+                    {{ sample_image_form.hidden_tag() }}
+                    <div class="mb-2">
+                        {{ sample_image_form.image(class="form-control form-control-sm") }}
+                    </div>
+                    <div class="mb-2">
+                        {{ sample_image_form.caption(class="form-control form-control-sm", placeholder="Caption (optional)") }}
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary btn-sm w-100">
+                        <i class="bi bi-upload me-1"></i>Upload Image
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Report Metadata -->
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Report &amp; Review Information</h5></div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <h6 class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Sample &amp; Laboratory</h6>
+                <dl class="mb-0 small">
+                    <dt>Date Received</dt>
+                    <dd>{{ sample.date_received.strftime('%d %b %Y') if sample.date_received else '—' }}</dd>
+                    <dt>Date Registered</dt>
+                    <dd>{{ sample.date_registered.strftime('%d %b %Y %H:%M') if sample.date_registered else '—' }}</dd>
+                    <dt>Lab Number</dt>
+                    <dd>{{ sample.lab_number }}</dd>
+                    <dt>Laboratory</dt>
+                    <dd>{{ sample.sample_type.value if sample.sample_type else '—' }}</dd>
+                </dl>
+            </div>
+            <div class="col-md-4">
+                <h6 class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">Assignment &amp; Review</h6>
+                <dl class="mb-0 small">
+                    {% if assignments %}
+                    {% for a in assignments[:3] %}
+                    <dt>{{ a.test_name }}</dt>
+                    <dd>
+                        Assigned to {{ a.chemist.full_name if a.chemist else 'Unknown' }}
+                        {% if a.assigned_date %} on {{ a.assigned_date.strftime('%d %b %Y') }}{% endif %}
+                        <br>Status: <span class="badge bg-secondary" style="font-size:.7rem;">{{ a.status.value }}</span>
+                    </dd>
+                    {% endfor %}
+                    {% else %}
+                    <dd class="text-muted">No assignments yet</dd>
+                    {% endif %}
+                    {% if sample.deputy_reviewed_by %}
+                    <dt>Deputy Review</dt>
+                    <dd>{{ sample.deputy_reviewer.full_name if sample.deputy_reviewer else '—' }}
+                        {% if sample.deputy_reviewed_at %} on {{ sample.deputy_reviewed_at.strftime('%d %b %Y') }}{% endif %}
+                    </dd>
+                    {% endif %}
+                    {% if sample.hod_reviewed_by %}
+                    <dt>HOD Review</dt>
+                    <dd>{{ sample.hod_reviewer.full_name if sample.hod_reviewer else '—' }}
+                        {% if sample.hod_reviewed_at %} on {{ sample.hod_reviewed_at.strftime('%d %b %Y') }}{% endif %}
+                    </dd>
+                    {% endif %}
+                </dl>
+            </div>
+            <div class="col-md-4">
+                <h6 class="text-muted small fw-semibold text-uppercase" style="font-size:.7rem; letter-spacing:.04em;">COA Information</h6>
+                <dl class="mb-0 small">
+                    {% if sample.coa_reference %}
+                    <dt>COA Reference</dt>
+                    <dd>{{ sample.coa_reference }}</dd>
+                    {% endif %}
+                    {% if sample.certificate_prepared_at %}
+                    <dt>COA Upload Date</dt>
+                    <dd>{{ sample.certificate_prepared_at.strftime('%d %b %Y %H:%M') }}</dd>
+                    {% endif %}
+                    {% if sample.certificate_preparer %}
+                    <dt>COA Uploaded By</dt>
+                    <dd>{{ sample.certificate_preparer.full_name }}
+                        <span class="badge bg-secondary" style="font-size:.65rem;">
+                            {% for r in sample.certificate_preparer.roles %}{{ r.value }}{% if not loop.last %}, {% endif %}{% endfor %}
+                        </span>
+                    </dd>
+                    {% endif %}
+                    {% if sample.certified_at %}
+                    <dt>Certified</dt>
+                    <dd>{{ sample.certified_at.strftime('%d %b %Y %H:%M') }}
+                        {% if sample.certifier %} by {{ sample.certifier.full_name }}{% endif %}
+                    </dd>
+                    {% endif %}
+                    {% if not sample.coa_reference and not sample.certificate_prepared_at %}
+                    <dd class="text-muted">No COA information yet</dd>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Supporting Documents -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center py-3">
+        <h5 class="mb-0"><i class="bi bi-paperclip me-2"></i>Supporting Documents</h5>
+        {% if current_user.has_permission(Permission.ADD_SUPPORTING_DOCUMENT) or current_user.has_any_role(Role.OFFICER, Role.ADMIN, Role.HOD, Role.GOVT_CHEMIST_ASSISTANT) or current_user.id == sample.uploaded_by %}
+        <a href="{{ url_for('samples.upload_supporting_document', sample_id=sample.id) }}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-plus me-1"></i>Upload Document
+        </a>
+        {% endif %}
+    </div>
+    {% if supporting_docs %}
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th class="ps-3">File</th>
+                    <th>Description</th>
+                    <th>Uploaded By</th>
+                    <th>Date</th>
+                    <th class="pe-3"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in supporting_docs %}
+                <tr>
+                    <td class="ps-3 align-middle">{{ doc.original_name }}</td>
+                    <td class="align-middle">{{ doc.description or '—' }}</td>
+                    <td class="align-middle">{{ doc.uploader.full_name if doc.uploader else 'Unknown' }}</td>
+                    <td class="align-middle">{{ doc.uploaded_at.strftime('%d %b %Y %H:%M') if doc.uploaded_at else '' }}</td>
+                    <td class="pe-3 align-middle">
+                        <div class="d-flex gap-2 justify-content-end">
+                            {% set doc_ext = doc.original_name.rsplit('.', 1)[-1].lower() if doc.original_name else '' %}
+                            {% if doc_ext in ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'doc', 'docx', 'xls', 'xlsx'] %}
+                            {% if doc_ext in ['doc', 'docx'] %}
+                            <a href="{{ url_for('main.preview_docx_as_pdf', filename=doc.file_path) }}"
+                               target="_blank" class="btn btn-sm btn-outline-info" title="Preview">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            {% else %}
+                            <a href="{{ url_for('main.preview_file', filename=doc.file_path) }}"
+                               target="_blank" class="btn btn-sm btn-outline-info" title="Preview">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            {% endif %}
+                            {% endif %}
+                            <a href="{{ url_for('samples.download_file', filename=doc.file_path) }}"
+                               class="btn btn-sm btn-outline-primary" title="Download">
+                                <i class="bi bi-download"></i>
+                            </a>
+                            {% if current_user.has_any_role(Role.ADMIN, Role.SUPER_ADMIN) or current_user.has_permission(Permission.DELETE_SUPPORTING_DOCUMENT) %}
+                            <form method="POST"
+                                  action="{{ url_for('samples.delete_supporting_document', sample_id=sample.id, doc_id=doc.id) }}"
+                                  onsubmit="return confirm('Delete &quot;{{ doc.original_name }}&quot;? This cannot be undone.');"
+                                  class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card-body text-center text-muted py-4">
+        <i class="bi bi-file-earmark-x d-block mb-2" style="font-size:2rem;"></i>
+        No supporting documents uploaded yet.
+    </div>
+    {% endif %}
+</div>
+
+<!-- Summary Report (Pharmaceutical) -->
+{% if sample.summary_report %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-file-text me-2"></i>Summary Report (Pharmaceutical)</h5>
+    </div>
+    <div class="card-body">
+        <div class="border rounded p-3 mb-3" style="background: var(--bs-tertiary-bg); white-space: pre-wrap; font-size:.875rem;">{{ sample.summary_report }}</div>
+        {% if sample.summary_report_file %}
+        <div class="d-flex gap-2 mb-2">
+            {% set sr_ext = sample.summary_report_file_original_name.rsplit('.', 1)[-1].lower() if sample.summary_report_file_original_name else '' %}
+            {% if sr_ext in ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'doc', 'docx'] %}
+            {% if sr_ext in ['doc', 'docx'] %}
+            <a href="{{ url_for('main.preview_docx_as_pdf', filename=sample.summary_report_file) }}"
+               target="_blank" class="btn btn-outline-info btn-sm">
+                <i class="bi bi-eye me-1"></i>Preview
+            </a>
+            {% else %}
+            <a href="{{ url_for('main.preview_file', filename=sample.summary_report_file) }}"
+               target="_blank" class="btn btn-outline-info btn-sm">
+                <i class="bi bi-eye me-1"></i>Preview
+            </a>
+            {% endif %}
+            {% endif %}
+            <a href="{{ url_for('samples.download_file', filename=sample.summary_report_file) }}"
+               class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-download me-1"></i>{{ sample.summary_report_file_original_name }}
+            </a>
+        </div>
+        {% endif %}
+        {% if sample.summary_report_user %}
+        <p class="text-muted small mt-2 mb-0">
+            Prepared by {{ sample.summary_report_user.full_name }}
+            {% if sample.summary_report_at %} on {{ sample.summary_report_at.strftime('%d %b %Y %H:%M') }}{% endif %}
+        </p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Invoices -->
+{% set sample_invoices = sample.invoices.all() %}
+{% if sample_invoices or (current_user.has_any_role(Role.ADMIN, Role.HOD, Role.OFFICER) or current_user.has_permission(Permission.INVOICE_GENERATE)) %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-receipt me-2"></i>Invoices</h5>
+        {% if current_user.has_any_role(Role.ADMIN, Role.HOD, Role.OFFICER) or current_user.has_permission(Permission.INVOICE_GENERATE) %}
+        <a href="{{ url_for('samples.invoice_create', sample_id=sample.id) }}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-plus me-1"></i>Create Invoice
+        </a>
+        {% endif %}
+    </div>
+    {% if sample_invoices %}
+    <div class="table-responsive">
+        <table class="table table-hover table-sm mb-0">
+            <thead>
+                <tr>
+                    <th>Invoice #</th>
+                    <th>Date</th>
+                    <th>Prepared By</th>
+                    <th class="text-end">Grand Total ($)</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inv in sample_invoices %}
+                <tr>
+                    <td>{{ inv.invoice_number }}</td>
+                    <td>{{ inv.created_at.strftime('%d %b %Y') if inv.created_at else '—' }}</td>
+                    <td>{{ inv.creator.full_name if inv.creator else '—' }}</td>
+                    <td class="text-end">{{ '{:,.2f}'.format(inv.grand_total) }}</td>
+                    <td>
+                        <a href="{{ url_for('samples.invoice_detail', sample_id=sample.id, invoice_id=inv.id) }}"
+                           class="btn btn-outline-info btn-sm py-0 px-1">
+                            <i class="bi bi-eye"></i> View
+                        </a>
+                        {% if current_user.has_any_role(Role.ADMIN, Role.HOD, Role.OFFICER) or current_user.has_permission(Permission.INVOICE_GENERATE) %}
+                        <a href="{{ url_for('samples.invoice_edit', sample_id=sample.id, invoice_id=inv.id) }}"
+                           class="btn btn-outline-primary btn-sm py-0 px-1">
+                            <i class="bi bi-pencil"></i> Edit
+                        </a>
+                        <form method="POST"
+                              action="{{ url_for('samples.invoice_delete', sample_id=sample.id, invoice_id=inv.id) }}"
+                              class="d-inline"
+                              onsubmit="return confirm('Delete invoice {{ inv.invoice_number }}? This cannot be undone.');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1">
+                                <i class="bi bi-trash"></i> Delete
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card-body text-center text-muted py-3">No invoices yet.</div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Certificate of Analysis -->
+{% if sample.certificate_text %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-file-earmark-medical me-2"></i>Certificate of Analysis</h5>
+    </div>
+    <div class="card-body">
+        <div class="border rounded p-3 mb-3" style="background: var(--bs-tertiary-bg); white-space: pre-wrap; font-size:.875rem;">{{ sample.certificate_text }}</div>
+        {% if sample.certificate_file %}
+        <div class="d-flex gap-2 mb-2">
+            {% set ext = sample.certificate_file_original_name.rsplit('.', 1)[-1].lower() if sample.certificate_file_original_name else '' %}
+            {% if ext in ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'doc', 'docx'] %}
+            {% if ext in ['doc', 'docx'] %}
+            <a href="{{ url_for('main.preview_docx_as_pdf', filename=sample.certificate_file) }}"
+               target="_blank" class="btn btn-outline-info btn-sm">
+                <i class="bi bi-eye me-1"></i>Preview
+            </a>
+            {% else %}
+            <a href="{{ url_for('main.preview_file', filename=sample.certificate_file) }}"
+               target="_blank" class="btn btn-outline-info btn-sm">
+                <i class="bi bi-eye me-1"></i>Preview
+            </a>
+            {% endif %}
+            {% endif %}
+            <a href="{{ url_for('samples.download_file', filename=sample.certificate_file) }}"
+               class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-download me-1"></i>{{ sample.certificate_file_original_name }}
+            </a>
+        </div>
+        {% endif %}
+        {% if sample.coa_reference %}
+        <p class="text-muted small mb-1"><strong>COA Reference:</strong> {{ sample.coa_reference }}</p>
+        {% endif %}
+        <div class="mt-2">
+            {% if sample.certificate_preparer %}
+            <p class="text-muted small mb-1">
+                Prepared by {{ sample.certificate_preparer.full_name }}
+                {% if sample.certificate_prepared_at %} on {{ sample.certificate_prepared_at.strftime('%d %b %Y %H:%M') }}{% endif %}
+            </p>
+            {% endif %}
+            {% if sample.certified_at %}
+            <p class="text-success small mb-0">
+                <i class="bi bi-patch-check-fill me-1"></i>
+                Signed by {{ sample.certifier.full_name if sample.certifier else 'Unknown' }} on {{ sample.certified_at.strftime('%d %b %Y %H:%M') }}
+            </p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Assignments -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Test Assignments</h5>
+        {# Explicit ASSIGN_SAMPLE permission overrides role restrictions #}
+        {% if current_user.has_permission(Permission.ASSIGN_SAMPLE) or current_user.is_branch_head() or current_user.has_role(Role.ADMIN) %}
+        <a href="{{ url_for('samples.assign', sample_id=sample.id) }}" class="btn btn-sm btn-primary">
+            <i class="bi bi-plus me-1"></i>Add Assignment
+        </a>
+        {% endif %}
+    </div>
+    {% if assignments %}
+    {% set a_colors = {
+        'Assigned': 'primary',
+        'In Progress': 'info',
+        'Report Submitted': 'warning',
+        'Preliminary Review': 'warning',
+        'Senior Chemist Review': 'warning',
+        'Returned for Correction': 'danger',
+        'Accepted': 'success',
+        'Rejected': 'danger',
+        'Completed': 'success',
+    } %}
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Test</th>
+                    <th>Analyst</th>
+                    <th>Assigned</th>
+                    <th>Test Date</th>
+                    <th>Report Date</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in assignments %}
+                <tr>
+                    <td>
+                        <span class="fw-semibold">{{ a.test_name }}</span>
+                        {% if a.test_reference %}
+                        <br><small class="text-muted">Ref: {{ a.test_reference }}</small>
+                        {% endif %}
+                    </td>
+                    <td>{{ a.chemist.full_name if a.chemist else 'Unknown' }}</td>
+                    <td>{{ a.assigned_date.strftime('%d %b %Y') }}</td>
+                    <td>{{ a.test_date.strftime('%d %b %Y') if a.test_date else '—' }}</td>
+                    <td>{{ a.report_submitted_at.strftime('%d %b %Y') if a.report_submitted_at else '—' }}</td>
+                    <td>
+                        <span class="badge bg-{{ a_colors.get(a.status.value, 'secondary') }}">
+                            {{ a.status.value }}
+                        </span>
+                        {% if a.out_of_spec %}
+                        <span class="badge bg-danger ms-1" title="Out of Specification">Out of Spec</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="d-flex gap-1 flex-wrap">
+                            <a href="{{ url_for('samples.assignment_detail', assignment_id=a.id) }}"
+                               class="btn btn-sm btn-outline-primary" title="View">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            {% if current_user.id == a.chemist_id and a.status.value in ['Assigned', 'In Progress', 'Returned for Correction'] %}
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-success open-submit-modal"
+                                    data-assignment-id="{{ a.id }}"
+                                    title="Submit Report">
+                                <i class="bi bi-upload"></i>
+                            </button>
+                            {% endif %}
+                            {% if (current_user.has_permission(Permission.PRELIMINARY_REVIEW) or current_user.has_any_role(Role.OFFICER, Role.SENIOR_CHEMIST, Role.DEPUTY, Role.HOD, Role.ADMIN) or current_user.id == sample.uploaded_by) and a.status.value == 'Report Submitted' %}
+                            <a href="{{ url_for('samples.preliminary_review', assignment_id=a.id) }}"
+                               class="btn btn-sm btn-outline-info" title="Preliminary Review">
+                                <i class="bi bi-clipboard-check"></i>
+                            </a>
+                            {% endif %}
+                            {% if (current_user.has_permission(Permission.TECHNICAL_REVIEW) or current_user.is_branch_head() or current_user.has_role(Role.ADMIN)) and a.status.value == 'Senior Chemist Review' %}
+                            <a href="{{ url_for('samples.review_report', assignment_id=a.id) }}"
+                               class="btn btn-sm btn-outline-warning" title="Senior Chemist Review">
+                                <i class="bi bi-clipboard-check"></i>
+                            </a>
+                            {% endif %}
+                            {% if (current_user.has_permission(Permission.TECHNICAL_REVIEW) or current_user.has_any_role(Role.SENIOR_CHEMIST, Role.HOD, Role.ADMIN)) and a.status.value not in ['Assigned', 'Returned for Correction'] %}
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-warning open-return-modal"
+                                    title="Return to Analyst"
+                                    data-assignment-id="{{ a.id }}"
+                                    data-test-name="{{ a.test_name }}"
+                                    data-analyst-name="{{ a.chemist.full_name if a.chemist else 'Analyst' }}"
+                                    data-action-url="{{ url_for('samples.return_to_analyst', assignment_id=a.id) }}">
+                                <i class="bi bi-arrow-counterclockwise"></i>
+                            </button>
+                            {% endif %}
+                            {% if (current_user.has_permission(Permission.ASSIGN_SAMPLE) or current_user.has_any_role(Role.ADMIN, Role.HOD) or current_user.id == a.assigned_by) and a.status.value in ['Assigned', 'In Progress'] %}
+                            <form method="POST" action="{{ url_for('samples.remove_assignment', assignment_id=a.id) }}" class="d-inline" onsubmit="return confirm('Remove this assignment?')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove Assignment">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                            {% if current_user.has_permission(Permission.ASSIGN_SAMPLE) or current_user.has_any_role(Role.SENIOR_CHEMIST, Role.HOD, Role.ADMIN) %}
+                            <a href="{{ url_for('samples.edit_assignment', assignment_id=a.id) }}"
+                               class="btn btn-sm btn-outline-secondary" title="Edit Assignment">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card-body text-center text-muted py-4">
+        <i class="bi bi-person-workspace d-block mb-2" style="font-size:2rem;"></i>
+        No assignments yet.
+    </div>
+    {% endif %}
+</div>
+
+<!-- Document Versions -->
+{% if document_versions %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-archive me-2"></i>Document Versions</h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Version</th>
+                    <th>Label</th>
+                    <th>File Name</th>
+                    <th>Uploaded By</th>
+                    <th>Uploaded At</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dv in document_versions %}
+                <tr>
+                    <td>{{ dv.document_type | replace('_', ' ') | title }}</td>
+                    <td>v{{ dv.version_number }}</td>
+                    <td>
+                        {% if dv.upload_label == 'original' %}
+                        <span class="badge bg-success">Original</span>
+                        {% elif dv.upload_label == 'revised' %}
+                        <span class="badge bg-warning">Revised</span>
+                        {% elif dv.upload_label == 'resubmission' %}
+                        <span class="badge bg-info">Resubmission</span>
+                        {% else %}
+                        <span class="badge bg-secondary">{{ dv.upload_label or '—' }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ dv.original_name }}</td>
+                    <td>{{ dv.uploader.full_name if dv.uploader else '—' }}</td>
+                    <td>{{ dv.uploaded_at.strftime('%d %b %Y %H:%M') if dv.uploaded_at else '—' }}</td>
+                    <td>
+                        {% set ext = dv.original_name.rsplit('.', 1)[-1].lower() if dv.original_name else '' %}
+                        {% if ext in ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'doc', 'docx'] %}
+                        {% if ext in ['doc', 'docx'] %}
+                        <a href="{{ url_for('main.preview_docx_as_pdf', filename=dv.file_path) }}"
+                           target="_blank" class="btn btn-outline-info btn-sm">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                        {% else %}
+                        <a href="{{ url_for('main.preview_file', filename=dv.file_path) }}"
+                           target="_blank" class="btn btn-outline-info btn-sm">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                        {% endif %}
+                        {% endif %}
+                        <a href="{{ url_for('samples.download_file', filename=dv.file_path) }}"
+                           class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-download"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Review History -->
+{% if review_histories %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-journal-check me-2"></i>Review History</h5>
+    </div>
+    <div class="card-body">
+        {% set review_type_labels = {'preliminary': 'Preliminary Review', 'technical': 'Senior Chemist Review', 'deputy': 'Deputy Review', 'hod': 'HOD Review'} %}
+        {% set action_colors = {'approved': 'success', 'returned': 'danger', 'accepted': 'success', 'rejected': 'danger', 'sign': 'success'} %}
+        {% for rh in review_histories %}
+        <div class="border rounded p-3 mb-3" style="background: var(--bs-tertiary-bg);">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                <div>
+                    <span class="badge bg-{{ action_colors.get(rh.action, 'secondary') }} me-1">{{ rh.action | title }}</span>
+                    <strong>{{ review_type_labels.get(rh.review_type, rh.review_type | title) }}</strong>
+                    <span class="text-muted">— Review #{{ rh.review_number }}</span>
+                    {% if rh.assignment %}
+                    <span class="text-muted small ms-1">({{ rh.assignment.test_name }})</span>
+                    {% endif %}
+                </div>
+                <small class="text-muted">{{ rh.reviewed_at.strftime('%d %b %Y %H:%M') if rh.reviewed_at else '—' }}</small>
+            </div>
+            <p class="mb-1 small"><strong>Reviewer:</strong> {{ rh.reviewer.full_name if rh.reviewer else 'Unknown' }}</p>
+            {% if rh.comments %}
+            <p class="mb-1 small"><strong>Comments:</strong> {{ rh.comments }}</p>
+            {% endif %}
+            {% if rh.checklist_data %}
+            {% set rh_checklist = rh.checklist_data | tojson_load %}
+            {% if rh_checklist %}
+            <details class="mt-2">
+                <summary class="fw-semibold small" style="cursor:pointer;"><i class="bi bi-list-check me-1"></i>View Checklist</summary>
+                <div class="row mt-2">
+                    {% for category, fields in checklist_categories %}
+                    <div class="col-md-6 mb-2">
+                        <div class="fw-semibold text-muted small text-uppercase">{{ category }}</div>
+                        <ul class="list-unstyled mb-0 ms-1">
+                            {% for field_name, label in fields %}
+                            <li>
+                                {% set val = rh_checklist.get(field_name, 'na') %}
+                                {% if val == 'yes' or val == true %}
+                                <i class="bi bi-check-circle-fill text-success me-1"></i>
+                                {% elif val == 'no' or val == false %}
+                                <i class="bi bi-x-circle-fill text-danger me-1"></i>
+                                {% else %}
+                                <i class="bi bi-dash-circle-fill text-warning me-1"></i>
+                                {% endif %}
+                                <small>{{ label }}
+                                    {% if val == 'yes' or val == true %}<span class="text-success">(Yes)</span>
+                                    {% elif val == 'no' or val == false %}<span class="text-danger">(No)</span>
+                                    {% else %}<span class="text-warning">(N/A)</span>{% endif %}
+                                </small>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endfor %}
+                </div>
+            </details>
+            {% endif %}
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% if review_pagination and review_pagination.pages > 1 %}
+        <nav aria-label="Review history pages" class="mt-3">
+            <ul class="pagination pagination-sm mb-0 justify-content-end">
+                <li class="page-item {% if not review_pagination.has_prev %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('samples.detail', sample_id=sample.id, review_page=(review_pagination.prev_num if review_pagination.has_prev else review_pagination.page), activity_page=history_pagination.page) }}">Previous</a>
+                </li>
+                {% for p in review_pagination.iter_pages(left_edge=1, left_current=1, right_current=2, right_edge=1) %}
+                    {% if p %}
+                    <li class="page-item {% if p == review_pagination.page %}active{% endif %}">
+                        <a class="page-link" href="{{ url_for('samples.detail', sample_id=sample.id, review_page=p, activity_page=history_pagination.page) }}">{{ p }}</a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                    {% endif %}
+                {% endfor %}
+                <li class="page-item {% if not review_pagination.has_next %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('samples.detail', sample_id=sample.id, review_page=(review_pagination.next_num if review_pagination.has_next else review_pagination.page), activity_page=history_pagination.page) }}">Next</a>
+                </li>
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Comments Section -->
+<div class="card mb-4">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <h5 class="mb-0"><i class="bi bi-chat-dots me-2"></i>Comments ({{ sample.comments.filter_by(is_deleted=False).count() }})</h5>
+    </div>
+    <div class="card-body">
+        {% set visible_comments = sample.comments.filter_by(is_deleted=False).order_by(SampleComment.created_at).all() %}
+        {% if visible_comments %}
+        <div class="comments-list">
+            {% for comment in visible_comments %}
+            <div class="d-flex mb-3 pb-3 {% if not loop.last %}border-bottom{% endif %}">
+                <div class="flex-shrink-0 me-3">
+                    <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center"
+                         style="width:36px;height:36px;font-size:.8rem;">
+                        {{ comment.author.first_name[0] }}{{ comment.author.last_name[0] }}
+                    </div>
+                </div>
+                <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong>{{ comment.author.full_name }}</strong>
+                            {% if comment.author.roles %}
+                            <span class="text-muted small ms-1">({{ comment.author.roles|map(attribute='value')|join(', ') }})</span>
+                            {% endif %}
+                            <br>
+                            <small class="text-muted">{{ comment.created_at.strftime('%d %b %Y at %I:%M %p') if comment.created_at else '' }}</small>
+                            {% if comment.updated_at %}
+                            <small class="text-muted fst-italic ms-1">(edited)</small>
+                            {% endif %}
+                        </div>
+                        {% if current_user.id == comment.user_id or current_user.has_any_role(Role.ADMIN, Role.SUPER_ADMIN) or current_user.has_permission(Permission.SAMPLE_COMMENT_EDIT) %}
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-link text-muted p-0" type="button"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-three-dots-vertical"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <button type="button" class="dropdown-item edit-comment-btn"
+                                            data-comment-id="{{ comment.id }}"
+                                            data-comment-text="{{ comment.comment_text | e }}">
+                                        <i class="bi bi-pencil me-1"></i>Edit
+                                    </button>
+                                </li>
+                                {% if current_user.has_any_role(Role.ADMIN, Role.SUPER_ADMIN) or current_user.has_permission(Permission.SAMPLE_COMMENT_DELETE) %}
+                                <li>
+                                    <form method="POST"
+                                          action="{{ url_for('samples.delete_comment', sample_id=sample.id, comment_id=comment.id) }}"
+                                          onsubmit="return confirm('Delete this comment?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="dropdown-item text-danger">
+                                            <i class="bi bi-trash me-1"></i>Delete
+                                        </button>
+                                    </form>
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <p class="mb-0 mt-1" style="white-space:pre-wrap;">{{ comment.comment_text }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted text-center mb-0 py-3">No comments yet.</p>
+        {% endif %}
+
+        <!-- Add comment form -->
+        {% if current_user.has_permission(Permission.SAMPLE_COMMENT_ADD) or current_user.has_any_role(Role.ADMIN, Role.SUPER_ADMIN, Role.HOD, Role.DEPUTY, Role.SENIOR_CHEMIST, Role.CHEMIST, Role.OFFICER) %}
+        <hr class="my-3">
+        <form method="POST" action="{{ url_for('samples.add_comment', sample_id=sample.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="mb-2">
+                <textarea name="comment_text" class="form-control" rows="3"
+                          placeholder="Add a comment..." maxlength="5000" required></textarea>
+            </div>
+            <div class="text-end">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="bi bi-send me-1"></i>Add Comment
+                </button>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Activity History -->
+<div class="card mb-4">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Activity History</h5>
+        {% if history %}
+        <a href="{{ url_for('main.export_history_pdf', sample_id=sample.id) }}"
+           target="_blank" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-file-earmark-pdf me-1"></i>Export to PDF
+        </a>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        {% if history %}
+        <div class="ps-2">
+            {% for entry in history %}
+            <div class="timeline-item mb-4 pb-1">
+                <div class="fw-semibold" style="font-size:.875rem;">
+                    {% if entry.action_type %}
+                    <span class="badge bg-secondary me-1" style="font-size:.7rem;">{{ entry.action_type }}</span>
+                    {% endif %}
+                    {{ entry.action }}
+                    <span class="text-muted fw-normal">— {{ entry.performer.full_name if entry.performer else 'Unknown' }}</span>
+                </div>
+                <small class="text-muted">{{ entry.created_at.strftime('%d %b %Y %H:%M') }}</small>
+                {% if entry.object_affected %}
+                <small class="text-info ms-2">{{ entry.object_affected }}</small>
+                {% endif %}
+                {% if entry.details %}
+                <p class="mb-0 mt-1 text-muted" style="font-size:.8rem;">{{ entry.details }}</p>
+                {% endif %}
+                {% if entry.change_description %}
+                <p class="mb-0 mt-1 text-muted fst-italic" style="font-size:.8rem;">{{ entry.change_description }}</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted text-center mb-0 py-3">No activity recorded yet.</p>
+        {% endif %}
+        {% if history and history_pagination and history_pagination.pages > 1 %}
+        <nav aria-label="Activity history pages" class="mt-3">
+            <ul class="pagination pagination-sm mb-0 justify-content-end">
+                <li class="page-item {% if not history_pagination.has_prev %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('samples.detail', sample_id=sample.id, review_page=review_pagination.page, activity_page=(history_pagination.prev_num if history_pagination.has_prev else history_pagination.page)) }}">Previous</a>
+                </li>
+                {% for p in history_pagination.iter_pages(left_edge=1, left_current=1, right_current=2, right_edge=1) %}
+                    {% if p %}
+                    <li class="page-item {% if p == history_pagination.page %}active{% endif %}">
+                        <a class="page-link" href="{{ url_for('samples.detail', sample_id=sample.id, review_page=review_pagination.page, activity_page=p) }}">{{ p }}</a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                    {% endif %}
+                {% endfor %}
+                <li class="page-item {% if not history_pagination.has_next %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('samples.detail', sample_id=sample.id, review_page=review_pagination.page, activity_page=(history_pagination.next_num if history_pagination.has_next else history_pagination.page)) }}">Next</a>
+                </li>
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+
+{# ── Collapsible Sample Sections ── #}
+<style>
+.collapsible-header { cursor: pointer; user-select: none; }
+.collapsible-header .collapse-icon { transition: transform 0.2s ease; }
+.collapsible-header.collapsed .collapse-icon { transform: rotate(-90deg); }
+.collapsible-header:hover { background: var(--bs-tertiary-bg); }
+.card-body-collapse.collapsing,
+.card-body-collapse.collapse { transition: height 0.25s ease; }
+/* Show validation indicator on collapsed sections with errors */
+.card.has-validation-error > .card-header { border-left: 3px solid var(--bs-danger); }
+</style>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Target all .card.mb-4 inside the content area (sample sections)
+    var cards = document.querySelectorAll('.card.mb-4');
+    var STORAGE_KEY = 'dgc_collapsed_sections_{{ sample.id }}';
+    var saved = {};
+    try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e) {}
+
+    cards.forEach(function(card, idx) {
+        var header = card.querySelector('.card-header');
+        var body = card.querySelector('.card-body, .table-responsive, .list-group');
+        if (!header || !body) return;
+
+        var sectionId = 'section-collapse-' + idx;
+        var isCollapsed = saved[sectionId] === true;
+
+        // Wrap body content for collapse
+        var wrapper = document.createElement('div');
+        wrapper.className = 'card-body-collapse collapse' + (isCollapsed ? '' : ' show');
+        wrapper.id = sectionId;
+        // Move all siblings after header into wrapper
+        var siblings = [];
+        var node = header.nextElementSibling;
+        while (node) { siblings.push(node); node = node.nextElementSibling; }
+        siblings.forEach(function(s) { wrapper.appendChild(s); });
+        card.appendChild(wrapper);
+
+        // Add collapse icon to header
+        var icon = document.createElement('i');
+        icon.className = 'bi bi-chevron-down collapse-icon ms-auto';
+        header.classList.add('collapsible-header', 'd-flex', 'align-items-center');
+        if (isCollapsed) header.classList.add('collapsed');
+        header.appendChild(icon);
+
+        // Toggle on click – skip if the click originated from an interactive element
+        // (button, link, input, etc.) inside the header so those elements remain clickable.
+        header.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+        header.setAttribute('aria-controls', sectionId);
+        header.addEventListener('click', function(e) {
+            if (e.target.closest('a, button, input, select, textarea, label, form')) return;
+            bootstrap.Collapse.getOrCreateInstance(document.getElementById(sectionId)).toggle();
+        });
+
+        // Save state on toggle
+        wrapper.addEventListener('hidden.bs.collapse', function() {
+            header.classList.add('collapsed');
+            saved[sectionId] = true;
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(saved)); } catch(e) {}
+        });
+        wrapper.addEventListener('shown.bs.collapse', function() {
+            header.classList.remove('collapsed');
+            saved[sectionId] = false;
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(saved)); } catch(e) {}
+        });
+
+        // Mark cards with validation errors inside collapsed sections
+        var hasError = wrapper.querySelector('.is-invalid, .invalid-feedback:not(.d-none), .text-danger');
+        if (hasError) card.classList.add('has-validation-error');
+    });
+});
+</script>
+{% endblock %}
+
+{% block modals %}
+{% set sv = sample.status.value %}
+{% set status_colors = {
+    'Registered': 'info',
+    'Assigned': 'primary',
+    'In Progress': 'info',
+    'Report Submitted': 'warning',
+    'Preliminary Review': 'warning',
+    'Branch Head Review': 'warning',
+    'HOD Review': 'warning',
+    'Returned for Correction': 'danger',
+    'Certificate Issued': 'success',
+    'Completed': 'success',
+    'Rejected': 'danger',
+    'Cancelled': 'dark',
+} %}
+{# ── Return to Analyst modal ── #}
+<div class="modal fade" id="returnToAnalystModal" tabindex="-1"
+     aria-labelledby="returnToAnalystModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header" style="background: var(--dgc-primary); color: #fff;">
+                <h5 class="modal-title" id="returnToAnalystModalLabel">
+                    <i class="bi bi-arrow-counterclockwise me-2"></i>Return to Analyst
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="returnToAnalystForm" method="POST" action="">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <p class="mb-3">Return test <strong id="returnTestName"></strong> to analyst <strong id="returnAnalystName"></strong> for correction?</p>
+                    <div class="mb-3">
+                        <label for="returnComment" class="form-label">Comment <span class="text-muted">(optional)</span></label>
+                        <textarea id="returnComment" name="return_comment" class="form-control" rows="3"
+                                  placeholder="Add a comment for the analyst (optional)…"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x me-1"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Return to Analyst
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{# ── HOD Workflow Return modal ── #}
+{% set non_returnable_statuses = ['Registered', 'Certified', 'Completed', 'Rejected'] %}
+{% if (current_user.has_role(Role.HOD) or current_user.has_permission(Permission.HOD_WORKFLOW_RETURN) or current_user.has_role(Role.ADMIN)) and sv not in non_returnable_statuses %}
+<div class="modal fade" id="hodReturnModal" tabindex="-1"
+     aria-labelledby="hodReturnModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title" id="hodReturnModalLabel">
+                    <i class="bi bi-arrow-return-left me-2"></i>HOD — Return Report
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('samples.hod_workflow_return', sample_id=sample.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <p class="mb-2"><strong>Current Stage:</strong>
+                        <span class="badge bg-{{ status_colors.get(sv, 'secondary') }}">{{ sv }}</span>
+                    </p>
+                    <p class="mb-3"><strong>Report:</strong> {{ sample.lab_number }} — {{ sample.sample_name }}</p>
+
+                    <div class="mb-3">
+                        <label for="hodReturnTarget" class="form-label fw-semibold">Return To <span class="text-danger">*</span></label>
+                        <select name="target_stage" id="hodReturnTarget" class="form-select" required>
+                            <option value="">— Select target stage —</option>
+                            {% set return_map = {
+                                'Assigned': [('REGISTERED', 'Registered')],
+                                'In Progress': [('REGISTERED', 'Registered'), ('ASSIGNED', 'Assigned')],
+                                'Report Submitted': [('ASSIGNED', 'Assigned'), ('IN_PROGRESS', 'In Progress')],
+                                'Preliminary Review': [('ASSIGNED', 'Assigned'), ('IN_PROGRESS', 'In Progress'), ('REPORT_SUBMITTED', 'Report Submitted')],
+                                'Senior Chemist Review': [('ASSIGNED', 'Assigned'), ('REPORT_SUBMITTED', 'Report Submitted'), ('UNDER_PRELIMINARY_REVIEW', 'Preliminary Review')],
+                                'Accepted': [('ASSIGNED', 'Assigned'), ('UNDER_TECHNICAL_REVIEW', 'Senior Chemist Review')],
+                                'Deputy Review': [('ASSIGNED', 'Assigned'), ('ACCEPTED', 'Accepted'), ('UNDER_TECHNICAL_REVIEW', 'Senior Chemist Review')],
+                                'Certificate Preparation': [('DEPUTY_REVIEW', 'Deputy Review'), ('ACCEPTED', 'Accepted')],
+                                'HOD Review': [('DEPUTY_REVIEW', 'Deputy Review'), ('CERTIFICATE_PREPARATION', 'Certificate Preparation'), ('ACCEPTED', 'Accepted')],
+                            } %}
+                            {% for name, label in return_map.get(sv, []) %}
+                            <option value="{{ name }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="hodReturnReason" class="form-label fw-semibold">Reason <span class="text-danger">*</span></label>
+                        <textarea name="return_reason" id="hodReturnReason" class="form-control" rows="4"
+                                  placeholder="Please provide a detailed reason for returning this report (minimum 10 characters)…"
+                                  minlength="10" required></textarea>
+                        <div class="form-text">Minimum 10 characters required.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x me-1"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-arrow-return-left me-1"></i>Confirm Return
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ── Admin Unreject modal ── #}
+{% if current_user.has_role(Role.ADMIN) and sv == 'Rejected' %}
+<div class="modal fade" id="unrejectModal" tabindex="-1"
+     aria-labelledby="unrejectModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="unrejectModalLabel">
+                    <i class="bi bi-arrow-counterclockwise me-2"></i>Admin — Remove Rejected Status
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('samples.unreject_sample', sample_id=sample.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <p class="mb-2"><strong>Sample:</strong> {{ sample.lab_number }} — {{ sample.sample_name }}</p>
+                    <p class="mb-3 text-muted">Removing the rejected status will return this sample to <strong>Deputy Review</strong>.</p>
+                    <div class="mb-3">
+                        <label for="unrejectReason" class="form-label fw-semibold">Reason <span class="text-danger">*</span></label>
+                        <textarea name="unreject_reason" id="unrejectReason" class="form-control" rows="3"
+                                  placeholder="Provide a reason for removing the rejected status (minimum 5 characters)…"
+                                  minlength="5" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x me-1"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Confirm — Remove Reject Status
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ── Test-selection modal (shown when analyst clicks "Submit Report") ── #}
+<div class="modal fade" id="testSelectionModal" tabindex="-1"
+     aria-labelledby="testSelectionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" style="background: var(--dgc-primary); color: #fff;">
+                <h5 class="modal-title" id="testSelectionModalLabel">
+                    <i class="bi bi-check2-square me-2"></i>Select Tests to Submit
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <input type="text" id="testSearchInput" class="form-control form-control-sm"
+                           placeholder="Search by test name or lab number…"
+                           aria-label="Search tests">
+                </div>
+                <div id="testLoadingSpinner" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading…</span>
+                    </div>
+                    <p class="mt-2 text-muted small">Loading your assigned tests…</p>
+                </div>
+                <div id="testNoAssignments" class="alert alert-info d-none" role="alert">
+                    <i class="bi bi-info-circle me-2"></i>You have no pending tests to submit a report for.
+                </div>
+                <div id="testNoResults" class="alert alert-warning d-none" role="alert">
+                    <i class="bi bi-search me-2"></i>No tests match your search.
+                </div>
+                <div id="testListContainer" class="d-none">
+                    <div class="d-flex gap-2 mb-3">
+                        <button type="button" id="modalSelectAll"
+                                class="btn btn-link btn-sm p-0 text-decoration-none">
+                            <i class="bi bi-check-all me-1"></i>Select All
+                        </button>
+                        <span class="text-muted">|</span>
+                        <button type="button" id="modalDeselectAll"
+                                class="btn btn-link btn-sm p-0 text-decoration-none">
+                            <i class="bi bi-x-square me-1"></i>Deselect All
+                        </button>
+                        <span class="ms-auto text-muted small" id="modalSelectionCount"></span>
+                    </div>
+                    <div id="testGroupList"></div>
+                </div>
+                <div id="testLoadError" class="alert alert-danger d-none" role="alert">
+                    <i class="bi bi-exclamation-circle me-2"></i>
+                    <span id="testLoadErrorMsg">Failed to load tests. Please try again.</span>
+                </div>
+                <div id="testValidationError" class="alert alert-danger d-none" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Please select at least one test.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x me-1"></i>Cancel
+                </button>
+                <button type="button" id="testSelectionConfirm" class="btn btn-success" disabled>
+                    <i class="bi bi-arrow-right me-1"></i>Continue to Report Form
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    var ASSIGNMENTS_URL = '{{ url_for("samples.api_my_pending_assignments") }}';
+    var currentAssignmentId = null;
+
+    var modal           = document.getElementById('testSelectionModal');
+    var spinner         = document.getElementById('testLoadingSpinner');
+    var noAssignments   = document.getElementById('testNoAssignments');
+    var noResults       = document.getElementById('testNoResults');
+    var listContainer   = document.getElementById('testListContainer');
+    var groupList       = document.getElementById('testGroupList');
+    var loadError       = document.getElementById('testLoadError');
+    var loadErrorMsg    = document.getElementById('testLoadErrorMsg');
+    var validationError = document.getElementById('testValidationError');
+    var confirmBtn      = document.getElementById('testSelectionConfirm');
+    var searchInput     = document.getElementById('testSearchInput');
+    var selectAllBtn    = document.getElementById('modalSelectAll');
+    var deselectAllBtn  = document.getElementById('modalDeselectAll');
+    var selectionCount  = document.getElementById('modalSelectionCount');
+
+    var allAssignments = [];
+    var fetched = false;
+
+    function setVisible(el, visible) {
+        el.classList.toggle('d-none', !visible);
+    }
+
+    function updateSelectionCount() {
+        var checked = 0;
+        var total = 0;
+        groupList.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
+            var item = cb.closest('.test-modal-item');
+            if (!item || item.style.display !== 'none') {
+                total++;
+                if (cb.checked) { checked++; }
+            }
+        });
+        selectionCount.textContent = checked + ' of ' + total + ' selected';
+        confirmBtn.disabled = (checked === 0);
+        setVisible(validationError, false);
+    }
+
+    function getCheckedIds() {
+        var ids = [];
+        groupList.querySelectorAll('input[type="checkbox"]:checked').forEach(function (cb) {
+            ids.push(cb.value);
+        });
+        return ids;
+    }
+
+    function renderAssignments(list, preSelectId) {
+        groupList.innerHTML = '';
+        if (!list || list.length === 0) {
+            setVisible(noAssignments, true);
+            setVisible(listContainer, false);
+            return;
+        }
+        var groups = {};
+        list.forEach(function (a) {
+            if (!groups[a.sample_id]) {
+                groups[a.sample_id] = { lab: a.lab_number, name: a.sample_name, items: [] };
+            }
+            groups[a.sample_id].items.push(a);
+        });
+
+        Object.values(groups).forEach(function (grp) {
+            var groupDiv = document.createElement('div');
+            groupDiv.className = 'mb-3';
+
+            var header = document.createElement('div');
+            header.className = 'd-flex align-items-center mb-2';
+            header.innerHTML = '<span class="badge bg-secondary me-2">' + grp.lab + '</span>'
+                             + '<span class="text-muted small">' + grp.name + '</span>';
+            groupDiv.appendChild(header);
+
+            grp.items.forEach(function (a) {
+                var itemDiv = document.createElement('div');
+                itemDiv.className = 'form-check ms-3 test-modal-item';
+                itemDiv.dataset.testName = (a.test_name || '').toLowerCase();
+                itemDiv.dataset.labNumber = (a.lab_number || '').toLowerCase();
+
+                var cb = document.createElement('input');
+                cb.className = 'form-check-input modal-test-checkbox';
+                cb.type = 'checkbox';
+                cb.value = a.id;
+                cb.id = 'modal_asgn_' + a.id;
+                cb.checked = (a.id === preSelectId);
+                cb.addEventListener('change', updateSelectionCount);
+
+                var label = document.createElement('label');
+                label.className = 'form-check-label';
+                label.htmlFor = 'modal_asgn_' + a.id;
+                label.innerHTML = '<span class="badge bg-info text-dark me-1">' + a.test_name + '</span>';
+                if (a.test_reference) {
+                    label.innerHTML += '<small class="text-muted">— ' + a.test_reference + '</small>';
+                }
+                var statusBadge = document.createElement('span');
+                statusBadge.className = 'badge bg-light text-dark border ms-1';
+                statusBadge.style.fontSize = '.7rem';
+                statusBadge.textContent = a.status;
+                label.appendChild(statusBadge);
+
+                itemDiv.appendChild(cb);
+                itemDiv.appendChild(label);
+                groupDiv.appendChild(itemDiv);
+            });
+            groupList.appendChild(groupDiv);
+        });
+
+        setVisible(listContainer, true);
+        setVisible(noAssignments, false);
+        updateSelectionCount();
+    }
+
+    function applySearch(term) {
+        var lo = (term || '').toLowerCase();
+        if (!lo) {
+            groupList.querySelectorAll('.test-modal-item').forEach(function (el) { el.style.display = ''; });
+            groupList.querySelectorAll('.mb-3').forEach(function (el) { el.style.display = ''; });
+            setVisible(noResults, false);
+            if (allAssignments.length > 0) { setVisible(listContainer, true); }
+            updateSelectionCount();
+            return;
+        }
+        var anyVisible = false;
+        groupList.querySelectorAll('.mb-3').forEach(function (grpEl) {
+            var items = grpEl.querySelectorAll('.test-modal-item');
+            var grpAny = false;
+            items.forEach(function (item) {
+                var matches = item.dataset.testName.includes(lo) || item.dataset.labNumber.includes(lo);
+                item.style.display = matches ? '' : 'none';
+                if (matches) { grpAny = true; anyVisible = true; }
+            });
+            grpEl.style.display = grpAny ? '' : 'none';
+        });
+        setVisible(noResults, !anyVisible);
+        setVisible(listContainer, anyVisible);
+        updateSelectionCount();
+    }
+
+    function loadAssignments(preSelectId) {
+        if (fetched) {
+            renderAssignments(allAssignments, preSelectId);
+            return;
+        }
+        setVisible(spinner, true);
+        setVisible(noAssignments, false);
+        setVisible(listContainer, false);
+        setVisible(loadError, false);
+        setVisible(validationError, false);
+        confirmBtn.disabled = true;
+
+        fetch(ASSIGNMENTS_URL, { credentials: 'same-origin' })
+            .then(function (resp) {
+                if (!resp.ok) { throw new Error('HTTP ' + resp.status); }
+                return resp.json();
+            })
+            .then(function (data) {
+                allAssignments = data.assignments || [];
+                fetched = true;
+                setVisible(spinner, false);
+                renderAssignments(allAssignments, preSelectId);
+            })
+            .catch(function (err) {
+                setVisible(spinner, false);
+                loadErrorMsg.textContent = 'Failed to load tests: ' + err.message + '. Please refresh and try again.';
+                setVisible(loadError, true);
+            });
+    }
+
+    // Wire up open-submit-modal buttons
+    document.querySelectorAll('.open-submit-modal').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            currentAssignmentId = parseInt(this.dataset.assignmentId, 10);
+            if (searchInput) { searchInput.value = ''; }
+            var bsModal = bootstrap.Modal.getOrCreateInstance(modal);
+            loadAssignments(currentAssignmentId);
+            bsModal.show();
+        });
+    });
+
+    if (modal) {
+        modal.addEventListener('hidden.bs.modal', function () {
+            if (searchInput) { searchInput.value = ''; applySearch(''); }
+            setVisible(validationError, false);
+        });
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener('input', function () { applySearch(this.value.trim()); });
+    }
+
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', function () {
+            groupList.querySelectorAll('.test-modal-item').forEach(function (item) {
+                if (item.style.display !== 'none') {
+                    var cb = item.querySelector('.modal-test-checkbox');
+                    if (cb) { cb.checked = true; }
+                }
+            });
+            updateSelectionCount();
+        });
+    }
+    if (deselectAllBtn) {
+        deselectAllBtn.addEventListener('click', function () {
+            groupList.querySelectorAll('.modal-test-checkbox').forEach(function (cb) { cb.checked = false; });
+            updateSelectionCount();
+        });
+    }
+
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', function () {
+            var ids = getCheckedIds();
+            if (ids.length === 0) {
+                setVisible(validationError, true);
+                return;
+            }
+            setVisible(validationError, false);
+            var baseUrl = '/samples/assignment/' + currentAssignmentId + '/report';
+            window.location.href = baseUrl + '?pre_selected=' + ids.join(',');
+        });
+    }
+})();
+</script>
+
+<script>
+(function () {
+    'use strict';
+    var returnModal = document.getElementById('returnToAnalystModal');
+    var returnForm  = document.getElementById('returnToAnalystForm');
+    var returnTestNameEl   = document.getElementById('returnTestName');
+    var returnAnalystNameEl = document.getElementById('returnAnalystName');
+    var returnCommentEl = document.getElementById('returnComment');
+
+    document.querySelectorAll('.open-return-modal').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            returnTestNameEl.textContent   = this.dataset.testName   || '';
+            returnAnalystNameEl.textContent = this.dataset.analystName || 'Analyst';
+            returnForm.action = this.dataset.actionUrl;
+            returnCommentEl.value = '';
+            bootstrap.Modal.getOrCreateInstance(returnModal).show();
+        });
+    });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}Toxicology Report - DGC SMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2><i class="bi bi-file-earmark-bar-graph"></i> Toxicology Report</h2>
+    <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Dashboard
+    </a>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body py-3 px-4">
+        <form method="GET" class="row g-3 align-items-end">
+            <div class="col-auto">
+                <label class="form-label fw-semibold small">Financial Year</label>
+                <select name="year" class="form-select form-select-sm">
+                    {% for y in available_years %}
+                    <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}/{{ y + 1 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <label class="form-label fw-semibold small">Quarter</label>
+                <select name="quarter" class="form-select form-select-sm">
+                    <option value="0" {% if quarter == 0 %}selected{% endif %}>All Quarters</option>
+                    <option value="1" {% if quarter == 1 %}selected{% endif %}>Q1 (Apr-Jun)</option>
+                    <option value="2" {% if quarter == 2 %}selected{% endif %}>Q2 (Jul-Sep)</option>
+                    <option value="3" {% if quarter == 3 %}selected{% endif %}>Q3 (Oct-Dec)</option>
+                    <option value="4" {% if quarter == 4 %}selected{% endif %}>Q4 (Jan-Mar)</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <label class="form-label fw-semibold small">Month</label>
+                <select name="month" class="form-select form-select-sm">
+                    <option value="0" {% if month == 0 %}selected{% endif %}>All Months</option>
+                    {% for m, mn in [(1,'Jan'),(2,'Feb'),(3,'Mar'),(4,'Apr'),(5,'May'),(6,'Jun'),(7,'Jul'),(8,'Aug'),(9,'Sep'),(10,'Oct'),(11,'Nov'),(12,'Dec')] %}
+                    <option value="{{ m }}" {% if month == m %}selected{% endif %}>{{ mn }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <label class="form-label fw-semibold small">Status</label>
+                <select name="status" class="form-select form-select-sm">
+                    <option value="">All</option>
+                    {% for s in SampleStatus %}
+                    <option value="{{ s.value }}" {% if status_filter == s.value %}selected{% endif %}>{{ s.value }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <label class="form-label fw-semibold small">Hospital</label>
+                <input type="text" name="hospital" value="{{ hospital_filter }}" class="form-control form-control-sm" placeholder="Hospital">
+            </div>
+            <div class="col-auto">
+                <label class="form-label fw-semibold small">Sample Type</label>
+                <input type="text" name="sample_type" value="{{ sample_type_filter }}" class="form-control form-control-sm" placeholder="Sample type">
+            </div>
+            <div class="col-auto">
+                <label class="form-label fw-semibold small">Patient Name</label>
+                <input type="text" name="patient_name" value="{{ patient_name_filter }}" class="form-control form-control-sm" placeholder="Patient name">
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Filter</button>
+                <a href="{{ url_for('main.toxicology_report_download', year=year, quarter=quarter, month=month, status=status_filter, hospital=hospital_filter, sample_type=sample_type_filter, patient_name=patient_name_filter) }}"
+                   class="btn btn-outline-success btn-sm ms-1">
+                    <i class="bi bi-download me-1"></i>CSV
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg">
+        <div class="card text-center"><div class="card-body py-3">
+            <div class="text-muted small fw-semibold text-uppercase">Total</div>
+            <div class="fs-4 fw-bold">{{ total }}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card text-center"><div class="card-body py-3">
+            <div class="text-muted small fw-semibold text-uppercase">Certified</div>
+            <div class="fs-4 fw-bold text-success">{{ certified }}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card text-center"><div class="card-body py-3">
+            <div class="text-muted small fw-semibold text-uppercase">In Progress</div>
+            <div class="fs-4 fw-bold text-info">{{ in_progress }}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card text-center"><div class="card-body py-3">
+            <div class="text-muted small fw-semibold text-uppercase">Avg TAT (working days)</div>
+            <div class="fs-4 fw-bold">{{ avg_tat if avg_tat is not none else '—' }}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card text-center"><div class="card-body py-3">
+            <div class="text-muted small fw-semibold text-uppercase">Out of Spec</div>
+            <div class="fs-4 fw-bold {% if out_of_spec_count > 0 %}text-danger{% endif %}">{{ out_of_spec_count }}</div>
+        </div></div>
+    </div>
+</div>
+
+<!-- How this report is calculated -->
+<div class="alert alert-light border d-flex align-items-start gap-2 mb-4" role="note">
+    <i class="bi bi-info-circle-fill text-primary mt-1"></i>
+    <div class="small">
+        <strong>How this report is calculated</strong>
+        <ul class="mb-0 mt-1 ps-3">
+            <li><strong>Certified</strong> counts samples by their <em>certification date</em> (<code>certified_at</code>): a certified sample only appears in the financial year, quarter or month in which it was certified. Summing the certified counts of each month in a quarter therefore equals that quarter's certified total.</li>
+            <li><strong>In Progress</strong> samples (not yet certified, completed or rejected) are <em>carried forward</em> and shown in every period until they are certified, so pending work is never lost.</li>
+            <li><strong>Total</strong> = certified/completed in the selected period + all carried-forward in-progress samples + rejected samples matching the filters.</li>
+            <li><strong>Avg TAT (working days)</strong> is the mean turnaround, from date registered to certification date, of certified/completed samples only, excluding weekends and configured non-working days.</li>
+            <li><strong>Downloaded CSV</strong> contains exactly the rows matching the currently applied filters (year, quarter, month, status and the fields above) — the same data shown on screen.</li>
+        </ul>
+    </div>
+</div>
+
+<!-- Samples Table -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>
+            Toxicology Samples — FY {{ year }}/{{ year + 1 }}{% if quarter %} Q{{ quarter }}{% endif %}{% if month %} (Month {{ month }}){% endif %}
+            {% if total_pages > 1 %}<span class="text-muted ms-2 small">— page {{ page }} of {{ total_pages }}</span>{% endif %}
+        </span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 table-sm">
+            <thead>
+                <tr>
+                    <th>Lab Number</th>
+                    <th>Sample Name</th>
+                    <th>Sample Type</th>
+                    <th>Patient Name</th>
+                    <th>Hospital</th>
+                    <th>Parish</th>
+                    <th>Status</th>
+                    <th>Date Received</th>
+                    <th>Registered</th>
+                    <th>Expected Report</th>
+                    <th>Certified Date</th>
+                    <th>TAT (working days)</th>
+                    <th>Resubmissions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in samples %}
+                <tr>
+                    <td><a href="{{ url_for('samples.detail', sample_id=s.id) }}">{{ s.lab_number }}</a>{% if s.is_accredited %} <i class="bi bi-patch-check-fill text-success" title="Accredited" data-bs-toggle="tooltip"></i>{% endif %}</td>
+                    <td>{{ s.sample_name }}</td>
+                    <td>{{ s.toxicology_sample_type_name or '—' }}</td>
+                    <td>{{ s.patient_name or '—' }}</td>
+                    <td>{{ s.ward_clinic or '—' }}</td>
+                    <td>{{ s.parish or '—' }}</td>
+                    <td>
+                        {% set status_colors = {
+                            'Registered': 'secondary', 'Assigned': 'primary', 'In Progress': 'info',
+                            'Report Submitted': 'warning', 'Certified': 'success', 'Completed': 'success',
+                            'Rejected': 'danger',
+                        } %}
+                        <span class="badge bg-{{ status_colors.get(s.status.value, 'secondary') }}">
+                            {{ s.status.value }}
+                        </span>
+                    </td>
+                    <td>{{ s.date_received.strftime('%d %b %Y') if s.date_received else '' }}</td>
+                    <td>{{ s.date_registered.strftime('%d %b %Y') if s.date_registered else '' }}</td>
+                    <td>{{ s.expected_report_date.strftime('%d %b %Y') if s.expected_report_date else '—' }}</td>
+                    <td>{{ s.certified_at.strftime('%d %b %Y') if s.certified_at else '—' }}</td>
+                    <td>
+                        {% if sample_tat[s.id] is not none %}
+                        <span class="badge bg-info text-dark">{{ sample_tat[s.id] }}</span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>
+                        {% set resub = sample_resubmissions.get(s.id, 0) %}
+                        {% if resub > 0 %}
+                        <span class="badge bg-secondary" title="{{ resub }} resubmission{{ 's' if resub != 1 else '' }}">
+                            {{ resub }}
+                        </span>
+                        {% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="13" class="text-center text-muted py-4">No toxicology samples found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if total_pages > 1 %}
+    <div class="card-footer d-flex justify-content-between align-items-center">
+        <small class="text-muted">Page {{ page }} of {{ total_pages }} ({{ total }} sample{{ 's' if total != 1 else '' }} total)</small>
+        <nav aria-label="Toxicology report pagination">
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('main.toxicology_report', year=year, quarter=quarter, month=month, status=status_filter, date_reported_from=date_reported_from, date_reported_to=date_reported_to, search=search, page=page - 1) }}">&laquo;</a>
+                </li>
+                {% for p in range(1, total_pages + 1) %}
+                {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+                <li class="page-item {% if p == page %}active{% endif %}">
+                    <a class="page-link" href="{{ url_for('main.toxicology_report', year=year, quarter=quarter, month=month, status=status_filter, date_reported_from=date_reported_from, date_reported_to=date_reported_to, search=search, page=p) }}">{{ p }}</a>
+                </li>
+                {% elif p == page - 3 or p == page + 3 %}
+                <li class="page-item disabled"><span class="page-link">…</span></li>
+                {% endif %}
+                {% endfor %}
+                <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('main.toxicology_report', year=year, quarter=quarter, month=month, status=status_filter, date_reported_from=date_reported_from, date_reported_to=date_reported_to, search=search, page=page + 1) }}">&raquo;</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

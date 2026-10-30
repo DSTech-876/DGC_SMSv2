@@ -1,0 +1,961 @@
+{% extends "base.html" %}
+{% block title %}QA Performance Summary - DGC SMS{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+    <div>
+        <h2 class="mb-0"><i class="bi bi-shield-check me-2"></i>QA Performance Summary</h2>
+        <p class="text-muted small mb-0 mt-1">
+            Laboratory Quality Assurance — Analyst Report Summary
+            &nbsp;|&nbsp;
+            <strong>{{ year }}/{{ year + 1 }}</strong>
+            {% if month %}&nbsp;— {{ ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month] }}{% elif quarter %}&nbsp;— Q{{ quarter }}{% endif %}
+        </p>
+    </div>
+    <a href="{{ url_for('main.qa_performance_download', year=year, quarter=quarter, month=month) }}"
+       class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-download me-1"></i>Export CSV
+    </a>
+</div>
+
+<!-- ── Filters ─────────────────────────────────────────────── -->
+<div class="card mb-4 shadow-sm">
+    <div class="card-body py-2">
+        <form method="GET" id="qa-filter-form" class="row g-2 align-items-end">
+            <div class="col-sm-6 col-md-2">
+                <label class="form-label small fw-semibold mb-1">Financial Year</label>
+                <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
+                    {% for y in available_years %}
+                    <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}/{{ y + 1 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-sm-6 col-md-2">
+                <label class="form-label small fw-semibold mb-1">Quarter</label>
+                <select name="quarter" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="0" {% if quarter == 0 %}selected{% endif %}>Full Year</option>
+                    <option value="1" {% if quarter == 1 %}selected{% endif %}>Q1 (Apr – Jun)</option>
+                    <option value="2" {% if quarter == 2 %}selected{% endif %}>Q2 (Jul – Sep)</option>
+                    <option value="3" {% if quarter == 3 %}selected{% endif %}>Q3 (Oct – Dec)</option>
+                    <option value="4" {% if quarter == 4 %}selected{% endif %}>Q4 (Jan – Mar)</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-md-2">
+                <label class="form-label small fw-semibold mb-1">Month</label>
+                <select name="month" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="0" {% if month == 0 %}selected{% endif %}>All Months</option>
+                    <option value="1"  {% if month == 1  %}selected{% endif %}>January</option>
+                    <option value="2"  {% if month == 2  %}selected{% endif %}>February</option>
+                    <option value="3"  {% if month == 3  %}selected{% endif %}>March</option>
+                    <option value="4"  {% if month == 4  %}selected{% endif %}>April</option>
+                    <option value="5"  {% if month == 5  %}selected{% endif %}>May</option>
+                    <option value="6"  {% if month == 6  %}selected{% endif %}>June</option>
+                    <option value="7"  {% if month == 7  %}selected{% endif %}>July</option>
+                    <option value="8"  {% if month == 8  %}selected{% endif %}>August</option>
+                    <option value="9"  {% if month == 9  %}selected{% endif %}>September</option>
+                    <option value="10" {% if month == 10 %}selected{% endif %}>October</option>
+                    <option value="11" {% if month == 11 %}selected{% endif %}>November</option>
+                    <option value="12" {% if month == 12 %}selected{% endif %}>December</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-md-4">
+                <label class="form-label small fw-semibold mb-1">Search Analyst</label>
+                <input type="text" name="search" class="form-control form-control-sm"
+                       placeholder="Analyst name…" value="{{ search }}">
+            </div>
+            <div class="col-sm-6 col-md-2 d-flex align-items-end gap-1">
+                <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+                <a href="{{ url_for('main.qa_performance_summary') }}" class="btn btn-outline-secondary btn-sm">Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ── Summary KPI Cards ────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md col-lg-2">
+        <div class="card text-center shadow-sm h-100">
+            <div class="card-body py-3">
+                <div class="fs-3 fw-bold text-primary">{{ analyst_list | length }}</div>
+                <small class="text-muted">Analysts</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md col-lg-2">
+        <div class="card text-center shadow-sm h-100">
+            <div class="card-body py-3">
+                <div class="fs-3 fw-bold text-info">{{ totals.food }}</div>
+                <small class="text-muted">Food {{ 'Samples' if count_by == 'sample' else 'Tests' }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md col-lg-2">
+        <div class="card text-center shadow-sm h-100">
+            <div class="card-body py-3">
+                <div class="fs-3 fw-bold text-warning">{{ totals.tox }}</div>
+                <small class="text-muted">Tox {{ 'Samples' if count_by == 'sample' else 'Tests' }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md col-lg-2">
+        <div class="card text-center shadow-sm h-100">
+            <div class="card-body py-3">
+                <div class="fs-3 fw-bold" style="color:#6f42c1;">{{ totals.pharm }}</div>
+                <small class="text-muted">Pharm {{ 'Samples' if count_by == 'sample' else 'Tests' }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md col-lg-2">
+        <div class="card text-center border-success shadow-sm h-100">
+            <div class="card-body py-3">
+                <div class="fs-3 fw-bold text-success">{{ totals.accepted_first }}</div>
+                <small class="text-muted">Accepted First</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md col-lg-2">
+        <div class="card text-center border-danger shadow-sm h-100">
+            <div class="card-body py-3">
+                <div class="fs-3 fw-bold text-danger">{{ totals.returned }}</div>
+                <small class="text-muted">Returned</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Corrected Sample-Level QA Counts (hidden) ──────────────── -->
+{% if false %}
+<div class="card shadow-sm mb-4 border-primary">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">
+            <i class="bi bi-journal-check me-1"></i>Corrected Sample-Level Return Count
+        </span>
+        <small class="text-muted">Source of truth: ReviewHistory return events + clearly linked DocumentVersion resubmissions</small>
+    </div>
+    <div class="card-body py-3">
+        <div class="row g-3 text-center">
+            <div class="col-6 col-md">
+                <div class="fw-bold fs-4">{{ corrected_report.totals.samples }}</div>
+                <small class="text-muted">Unique Samples</small>
+            </div>
+            <div class="col-6 col-md">
+                <div class="fw-bold fs-4 text-danger" data-testid="qa-prelim-return-total">{{ corrected_report.totals.preliminary_returns }}</div>
+                <small class="text-muted">Preliminary Return Events</small>
+            </div>
+            <div class="col-6 col-md">
+                <div class="fw-bold fs-4 text-warning">{{ corrected_report.totals.other_resubmissions }}</div>
+                <small class="text-muted">Other Resubmissions</small>
+            </div>
+            <div class="col-6 col-md">
+                <div class="fw-bold fs-4 text-primary">{{ corrected_report.totals.combined_total }}</div>
+                <small class="text-muted">Combined Total</small>
+            </div>
+            <div class="col-6 col-md">
+                <div class="fw-bold fs-4 text-secondary">{{ corrected_report.quality_issues | length }}</div>
+                <small class="text-muted">Data-Quality Flags</small>
+            </div>
+        </div>
+        <p class="small text-muted mt-3 mb-0">
+            Preliminary returns count each distinct <code>ReviewHistory</code> row where
+            <code>review_type='preliminary'</code> and <code>action='returned'</code>.
+            Preliminary resubmission uploads are shown in the CSV audit trail but excluded from the combined total to avoid double-counting.
+        </p>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th class="ps-3">Sample ID</th>
+                    <th>Analysts Involved</th>
+                    <th class="text-center">Prelim Returns</th>
+                    <th class="text-center">Senior Chemist Review</th>
+                    <th class="text-center">Deputy</th>
+                    <th class="text-center">HOD</th>
+                    <th class="text-center">Unspecified</th>
+                    <th class="text-center">Combined</th>
+                    <th>Audit / Flags</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in corrected_report_preview_rows %}
+                <tr>
+                    <td class="ps-3 fw-semibold">{{ row.lab_number }}</td>
+                    <td class="small">{{ row.analysts_display }}</td>
+                    <td class="text-center">{{ row.preliminary_returns }}</td>
+                    <td class="text-center">{{ row.type_breakdown.technical }}</td>
+                    <td class="text-center">{{ row.type_breakdown.deputy }}</td>
+                    <td class="text-center">{{ row.type_breakdown.hod }}</td>
+                    <td class="text-center">{{ row.type_breakdown.unspecified }}</td>
+                    <td class="text-center fw-semibold">{{ row.combined_total }}</td>
+                    <td class="small">
+                        {% if row.has_quality_flags %}
+                        <span class="text-warning">{{ row.quality_flags_display }}</span>
+                        {% else %}
+                        <span class="text-muted">{{ (row.preliminary_return_ids + row.other_resubmission_ids) | length }} counted row(s)</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="9" class="text-center text-muted py-3">No sample data found for this period.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if corrected_report.sample_rows | length > 10 %}
+    <div class="card-footer small text-muted">
+        Showing first 10 samples. Export CSV for the full record-level audit trail, exclusions, and analyst breakdown.
+    </div>
+    {% endif %}
+</div>
+{% endif %}{# end hidden Corrected Sample-Level Return Count #}
+
+<!-- ── Preliminary Review Comment Category Breakdown ───────────────── -->
+{% set cat_total = comment_category_breakdown | sum(attribute='count') %}
+{% set cat_max = (comment_category_breakdown | map(attribute='count') | list | max) if comment_category_breakdown else 0 %}
+<style>
+    .comment-cat-row:focus-visible,
+    .comment-cat-row.is-selected {
+        outline: 2px solid var(--bs-primary);
+        outline-offset: -2px;
+        background-color: var(--bs-primary-bg-subtle, #e7f1ff);
+    }
+    .comment-cat-row .cat-name {
+        white-space: normal;
+        word-break: break-word;
+    }
+    @media (max-width: 576px) {
+        #comment-category-table th, #comment-category-table td { font-size: 0.85rem; }
+    }
+</style>
+<div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-1">
+        <span class="fw-semibold">
+            <i class="bi bi-bar-chart-fill me-1"></i>Preliminary Review Comment Categories
+            <span class="text-muted fw-normal ms-1 small">— {{ year }}/{{ year + 1 }}{% if month %} — {{ ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month] }}{% elif quarter %} Q{{ quarter }}{% endif %}</span>
+        </span>
+        {% if cat_total > 0 %}
+        <span class="ms-2 text-muted fw-normal" style="font-size:0.8rem;"><i class="bi bi-hand-index me-1"></i>Click or press Enter on a row to see the contributing records</span>
+        {% endif %}
+    </div>
+    {% if cat_total > 0 %}
+    <div class="table-responsive">
+        <table class="table table-hover table-bordered align-middle mb-0" id="comment-category-table">
+            <caption class="visually-hidden">Preliminary review comment categories with selection counts and share of total</caption>
+            <thead class="table-secondary">
+                <tr>
+                    <th class="ps-3" style="min-width:240px;">Comment Category</th>
+                    <th class="text-center" style="width:110px;">Selections</th>
+                    <th style="min-width:180px;">Share of Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cat in comment_category_breakdown %}
+                <tr class="comment-cat-row{% if cat.count > 0 and cat.count == cat_max %} table-warning{% endif %}"
+                    style="cursor:pointer;"
+                    tabindex="0"
+                    role="button"
+                    aria-label="{{ cat.category }}: {{ cat.count }} selection{{ 's' if cat.count != 1 else '' }}, {{ cat.pct }} percent of total. Press Enter to view records."
+                    title="{{ cat.category }}"
+                    data-category="{{ cat.category | e }}"
+                    data-reviews='{{ cat.reviews | tojson }}'>
+                    <td class="ps-3 fw-semibold">
+                        <span class="cat-name">{{ cat.category }}</span>
+                        {% if cat.count > 0 and cat.count == cat_max %}
+                        <span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem;" title="Most frequently selected category">Top</span>
+                        {% endif %}
+                        <i class="bi bi-chevron-right ms-1 text-muted" style="font-size:0.75rem;"></i>
+                    </td>
+                    <td class="text-center">
+                        {% if cat.count > 0 %}
+                        <span class="badge rounded-pill bg-primary fs-6 px-3">{{ cat.count }}</span>
+                        {% else %}
+                        <span class="text-muted">0</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if cat.count > 0 %}
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="progress flex-grow-1" style="height:10px; max-width:160px;">
+                                <div class="progress-bar bg-primary" style="width:{{ [cat.pct, 100] | min }}%;"></div>
+                            </div>
+                            <span class="text-muted" style="font-size:0.78rem; white-space:nowrap;">{{ cat.pct }}%</span>
+                        </div>
+                        {% else %}
+                        <span class="text-muted small">0%</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot class="table-secondary fw-bold">
+                <tr>
+                    <td class="ps-3">TOTAL</td>
+                    <td class="text-center">{{ cat_total }}</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    {% else %}
+    <div class="card-body text-center text-muted py-4">
+        <i class="bi bi-chat-left-text fs-3 d-block mb-2"></i>
+        No preliminary review return comments found for this period.
+        <div class="small mt-1">Try selecting a different financial year, quarter, or month.</div>
+    </div>
+    {% endif %}
+</div>
+<div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">
+            <i class="bi bi-table me-1"></i>
+            Analyst Performance Table
+            <span class="text-muted fw-normal ms-1 small">
+                — {{ year }}/{{ year + 1 }}{% if month %} — {{ ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month] }}{% elif quarter %} Q{{ quarter }}{% endif %}
+                {% if search %} — filtered: "{{ search }}"{% endif %}
+            </span>
+        </span>
+        <span class="d-flex align-items-center gap-3">
+            <span class="text-muted fw-normal" style="font-size:0.8rem;"><i class="bi bi-hand-index me-1"></i>Click a row to see preliminary review details</span>
+            <small class="text-muted">{{ analyst_list | length }} analyst{{ 's' if analyst_list | length != 1 else '' }}</small>
+        </span>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover table-bordered align-middle mb-0" id="qa-table">
+            <thead class="table-dark">
+                <tr>
+                    <th class="ps-3" style="min-width:170px;">Analyst</th>
+                    <th class="text-center" title="Food (Milk) + Food (Alcohol)">
+                        <i class="bi bi-cup-straw me-1 text-info"></i>Food
+                    </th>
+                    <th class="text-center" title="Toxicology">
+                        <i class="bi bi-droplet me-1 text-warning"></i>Tox
+                    </th>
+                    <th class="text-center" title="Pharmaceutical + Not-Registered Pharm">
+                        <i class="bi bi-capsule me-1" style="color:#6f42c1;"></i>Pharm
+                    </th>
+                    <th class="text-center text-nowrap">
+                        <i class="bi bi-check-circle-fill me-1 text-success"></i>
+                        Accepted on<br>First Submission
+                    </th>
+                    <th class="text-center text-nowrap">
+                        <i class="bi bi-arrow-counterclockwise me-1 text-danger"></i>
+                        Returned for<br>Correction
+                    </th>
+                    <th style="min-width:280px;">
+                        <i class="bi bi-chat-left-text me-1 text-muted"></i>
+                        Comments / Summary of Reasons for Returned Report
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for analyst in analyst_list %}
+                {% set total_tests = analyst.food + analyst.tox + analyst.pharm %}
+                {% set first_pct = ((analyst.accepted_first / (analyst.accepted_first + analyst.returned) * 100) | round(0) | int) if (analyst.accepted_first + analyst.returned) > 0 else 0 %}
+                <tr class="analyst-row" style="cursor:pointer;"
+                    data-analyst="{{ analyst.name | e }}"
+                    data-reviews='{{ analyst.reviews | tojson }}'>
+                    <!-- Analyst Name -->
+                    <td class="ps-3 fw-semibold">
+                        {{ analyst.name }}
+                        <i class="bi bi-chevron-right ms-1 text-muted" style="font-size:0.75rem;"></i>
+                        <div class="text-muted fw-normal" style="font-size:0.72rem;">
+                            {{ total_tests }} {{ 'sample' if count_by == 'sample' else 'assignment' }}{{ 's' if total_tests != 1 else '' }}
+                        </div>
+                    </td>
+
+                    <!-- Food -->
+                    <td class="text-center">
+                        {% if analyst.food > 0 %}
+                        <span class="badge rounded-pill bg-info text-dark fs-6 px-3">{{ analyst.food }}</span>
+                        {% else %}
+                        <span class="text-muted">0</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Tox -->
+                    <td class="text-center">
+                        {% if analyst.tox > 0 %}
+                        <span class="badge rounded-pill bg-warning text-dark fs-6 px-3">{{ analyst.tox }}</span>
+                        {% else %}
+                        <span class="text-muted">0</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Pharm -->
+                    <td class="text-center">
+                        {% if analyst.pharm > 0 %}
+                        <span class="badge rounded-pill fs-6 px-3" style="background:#6f42c1;color:#fff;">{{ analyst.pharm }}</span>
+                        {% else %}
+                        <span class="text-muted">0</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Accepted on First Submission -->
+                    <td class="text-center">
+                        {% if analyst.accepted_first > 0 %}
+                        <span class="badge rounded-pill bg-success fs-6 px-3">{{ analyst.accepted_first }}</span>
+                        <div class="mt-1">
+                            <div class="progress" style="height:6px; width:70px; margin:0 auto;">
+                                <div class="progress-bar bg-success" style="width:{{ first_pct }}%;"></div>
+                            </div>
+                            <div style="font-size:0.68rem;" class="text-muted mt-1">{{ first_pct }}%</div>
+                        </div>
+                        {% else %}
+                        <span class="text-muted">0</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Returned for Correction -->
+                    <td class="text-center">
+                        {% if analyst.returned > 0 %}
+                        <span class="badge rounded-pill bg-danger fs-6 px-3">{{ analyst.returned }}</span>
+                        {% else %}
+                        <span class="badge rounded-pill bg-success fs-6 px-3">0</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Return Reason Summary -->
+                    <td>
+                        {% if analyst.returned == 0 %}
+                        <span class="text-success small"><i class="bi bi-check2-circle me-1"></i>No returns</span>
+                        {% elif analyst.return_reasons %}
+                        <span class="small text-dark">{{ analyst.return_reasons }}</span>
+                        {% else %}
+                        <span class="text-muted small fst-italic">No data found</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-center text-muted py-5">
+                        <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                        No analyst data found for this period.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+
+            <!-- Totals footer -->
+            {% if analyst_list %}
+            <tfoot class="table-secondary fw-bold">
+                <tr>
+                    <td class="ps-3">TOTALS</td>
+                    <td class="text-center">{{ totals.food }}</td>
+                    <td class="text-center">{{ totals.tox }}</td>
+                    <td class="text-center">{{ totals.pharm }}</td>
+                    <td class="text-center">{{ totals.accepted_first }}</td>
+                    <td class="text-center">{{ totals.returned }}</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+    </div>
+</div>
+
+<!-- ── Legend ────────────────────────────────────────────────── -->
+<div class="card shadow-sm border-0 bg-light">
+    <div class="card-body py-2">
+        <p class="small fw-semibold mb-1"><i class="bi bi-info-circle me-1"></i>Legend &amp; Notes</p>
+        <ul class="mb-0 small text-muted ps-3">
+            <li><strong>Food</strong> — includes Food (Milk) and Food (Alcohol) disciplines.</li>
+            <li><strong>Tox</strong> — Toxicology laboratory.</li>
+            <li><strong>Pharm</strong> — Pharmaceutical and Not-Registered Pharmaceutical.</li>
+            {% if count_by == 'sample' %}
+            <li><strong>Counting method: by sample</strong> — each unique sample is counted once, regardless of how many test assignments it has.
+                A sample is "Returned" if any of its tests received a preliminary return; "Accepted on First Submission" if none did.</li>
+            {% else %}
+            <li><strong>Counting method: by test assignment</strong> — each individual test assignment is counted separately.</li>
+            {% endif %}
+            <li><strong>Accepted on First Submission</strong> — no preliminary review returns recorded.</li>
+            <li><strong>Returned for Correction</strong> — at least one Preliminary Review return event was recorded for the sample or assignment.</li>
+            <li><strong>Return reasons</strong> are derived automatically from reviewer comments. Export the CSV for full details.</li>
+            <li class="mt-1">The counting method can be changed by an administrator in
+                <a href="{{ url_for('main.settings') }}">System Settings</a>.</li>
+        </ul>
+    </div>
+</div>
+
+<!-- ── Preliminary Review Performance (per-analyst) — hidden ──── -->
+{% if false %}
+{% if prelim_analyst_list %}
+<div class="card shadow-sm mt-4">
+    <div class="card-header fw-semibold">
+        <i class="bi bi-clipboard2-data me-1"></i>Preliminary Review Performance
+        <span class="text-muted fw-normal ms-1 small">— {{ year }}/{{ year + 1 }}{% if month %} — {{ ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month] }}{% elif quarter %} Q{{ quarter }}{% endif %}</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover table-bordered align-middle mb-0" id="prelim-perf-table">
+            <thead class="table-dark">
+                <tr>
+                    <th class="ps-3" style="min-width:170px;">Analyst</th>
+                    <th class="text-center text-nowrap">Lab Type</th>
+                    <th class="text-center text-nowrap" title="Total unique samples reviewed by the analyst">
+                        Qty<br>Samples
+                    </th>
+                    <th class="text-center text-nowrap" title="Samples with at least one preliminary review returned">
+                        <i class="bi bi-arrow-counterclockwise me-1 text-warning"></i>
+                        Returned
+                    </th>
+                    <th class="text-center text-nowrap" title="Samples with at least one preliminary review not accepted">
+                        <i class="bi bi-x-circle me-1 text-danger"></i>
+                        Not Accepted
+                    </th>
+                    <th class="text-center text-nowrap" title="Average hours from report submission to preliminary return">
+                        Avg Time<br>to Return (hrs)
+                    </th>
+                    <th class="text-center text-nowrap" title="Average hours from report submission to not-accepted decision">
+                        Avg Time to<br>Not Accept (hrs)
+                    </th>
+                    <th class="text-center text-nowrap" title="Sum of all return review durations">
+                        Total Time<br>Returned (hrs)
+                    </th>
+                    <th class="text-center text-nowrap" title="Sum of all not-accepted review durations">
+                        Total Time<br>Not Accepted (hrs)
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in prelim_analyst_list %}
+                <tr>
+                    <td class="ps-3 fw-semibold">{{ a.name }}</td>
+                    <td class="text-center">
+                        {% if a.lab_type == 'food' %}
+                        <span class="badge bg-info text-dark">Food</span>
+                        {% elif a.lab_type == 'tox' %}
+                        <span class="badge bg-warning text-dark">Tox</span>
+                        {% elif a.lab_type == 'pharm' %}
+                        <span class="badge text-white" style="background:#6f42c1;">Pharm</span>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <span class="badge rounded-pill bg-secondary fs-6 px-3">{{ a.qty_samples }}</span>
+                    </td>
+                    <td class="text-center">
+                        {% if a.returned_count > 0 %}
+                        <span class="badge rounded-pill bg-warning text-dark fs-6 px-3">{{ a.returned_count }}</span>
+                        {% else %}
+                        <span class="badge rounded-pill bg-success fs-6 px-3">0</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if a.not_accepted_count > 0 %}
+                        <span class="badge rounded-pill bg-danger fs-6 px-3">{{ a.not_accepted_count }}</span>
+                        {% else %}
+                        <span class="badge rounded-pill bg-success fs-6 px-3">0</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if a.avg_time_returned_hrs > 0 %}
+                        <span class="fw-semibold text-warning">{{ a.avg_time_returned_hrs }}</span>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if a.avg_time_not_accepted_hrs > 0 %}
+                        <span class="fw-semibold text-danger">{{ a.avg_time_not_accepted_hrs }}</span>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if a.total_time_returned_hrs > 0 %}
+                        <span class="text-warning fw-semibold">{{ a.total_time_returned_hrs }}</span>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if a.total_time_not_accepted_hrs > 0 %}
+                        <span class="text-danger fw-semibold">{{ a.total_time_not_accepted_hrs }}</span>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot class="table-secondary fw-bold">
+                <tr>
+                    <td class="ps-3">TOTALS</td>
+                    <td></td>
+                    <td class="text-center">{{ prelim_analyst_list | sum(attribute='qty_samples') }}</td>
+                    <td class="text-center">{{ prelim_analyst_list | sum(attribute='returned_count') }}</td>
+                    <td class="text-center">{{ prelim_analyst_list | sum(attribute='not_accepted_count') }}</td>
+                    <td></td>
+                    <td></td>
+                    <td class="text-center">{{ prelim_analyst_list | sum(attribute='total_time_returned_hrs') | round(2) }}</td>
+                    <td class="text-center">{{ prelim_analyst_list | sum(attribute='total_time_not_accepted_hrs') | round(2) }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endif %}{# end hidden Preliminary Review Performance #}
+
+<!-- ── Preliminary Reviewer Stats ───────────────────────────── -->
+{% if reviewer_stats %}
+<div class="card shadow-sm mt-4">
+    <div class="card-header fw-semibold">
+        <i class="bi bi-person-check me-1"></i>Preliminary Review Activity
+        <span class="text-muted fw-normal ms-1 small">— {{ year }}/{{ year + 1 }}{% if month %} — {{ ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month] }}{% elif quarter %} Q{{ quarter }}{% endif %}</span>
+        <span class="ms-2 text-muted fw-normal" style="font-size:0.8rem;"><i class="bi bi-hand-index me-1"></i>Click a row to see the reviewed reports</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover table-bordered align-middle mb-0" id="reviewer-stats-table">
+            <thead class="table-secondary">
+                <tr>
+                    <th class="ps-3" style="min-width:170px;">Reviewer</th>
+                    <th class="text-center">Total Reviews</th>
+                    <th class="text-center text-success">Approved</th>
+                    <th class="text-center text-warning">Returned</th>
+                    <th class="text-center text-danger">Not Accepted</th>
+                    <th class="text-center">Non-Approval Rate</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rv in reviewer_stats %}
+                <tr class="reviewer-row" style="cursor:pointer;"
+                    data-reviewer="{{ rv.name | e }}"
+                    data-reviews='{{ rv.reviews | tojson }}'>
+                    <td class="ps-3 fw-semibold">
+                        {{ rv.name }}
+                        <i class="bi bi-chevron-right ms-1 text-muted" style="font-size:0.75rem;"></i>
+                    </td>
+                    <td class="text-center">
+                        <span class="badge rounded-pill bg-secondary fs-6 px-3">{{ rv.total }}</span>
+                    </td>
+                    <td class="text-center">
+                        {% if rv.approved > 0 %}
+                        <span class="badge rounded-pill bg-success fs-6 px-3">{{ rv.approved }}</span>
+                        {% else %}
+                        <span class="text-muted">0</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if rv.returned > 0 %}
+                        <span class="badge rounded-pill bg-warning text-dark fs-6 px-3">{{ rv.returned }}</span>
+                        {% else %}
+                        <span class="badge rounded-pill bg-success fs-6 px-3">0</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if rv.not_accepted > 0 %}
+                        <span class="badge rounded-pill bg-danger fs-6 px-3">{{ rv.not_accepted }}</span>
+                        {% else %}
+                        <span class="badge rounded-pill bg-success fs-6 px-3">0</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if rv.return_rate > 0 %}
+                        <div>
+                            <div class="progress" style="height:6px; width:70px; margin:0 auto;">
+                                <div class="progress-bar bg-danger" style="width:{{ [rv.return_rate, 100] | min }}%;"></div>
+                            </div>
+                            <div style="font-size:0.68rem;" class="text-muted mt-1">{{ rv.return_rate }}%</div>
+                        </div>
+                        {% else %}
+                        <span class="text-success small">0%</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot class="table-secondary fw-bold">
+                <tr>
+                    <td class="ps-3">TOTALS</td>
+                    <td class="text-center">{{ reviewer_stats | sum(attribute='total') }}</td>
+                    <td class="text-center">{{ reviewer_stats | sum(attribute='approved') }}</td>
+                    <td class="text-center">{{ reviewer_stats | sum(attribute='returned') }}</td>
+                    <td class="text-center">{{ reviewer_stats | sum(attribute='not_accepted') }}</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+<!-- ── Reviewer Reports Modal ────────────────────────────────── -->
+<div class="modal fade" id="reviewerReportsModal" tabindex="-1" aria-labelledby="reviewerReportsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="reviewerReportsModalLabel">
+                    <i class="bi bi-person-check me-2"></i>Reports Reviewed by <span id="reviewerModalName"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <table class="table table-sm table-bordered align-middle mb-0" id="reviewerReportsTable">
+                    <thead class="table-dark">
+                        <tr>
+                            <th class="ps-3">Lab Number</th>
+                            <th>Analyst</th>
+                            <th>Test</th>
+                            <th class="text-center">Action</th>
+                            <th>Date Reviewed</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reviewerReportsBody"></tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <span class="text-muted small me-auto" id="reviewerReportsCount"></span>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const ACTION_BADGE = {
+        approved:     '<span class="badge bg-success">Approved</span>',
+        returned:     '<span class="badge bg-warning text-dark">Returned</span>',
+        not_accepted: '<span class="badge bg-danger">Not Accepted</span>',
+    };
+
+    function setText(el, val) { el.textContent = val; }
+
+    document.querySelectorAll('.reviewer-row').forEach(function (row) {
+        row.addEventListener('click', function () {
+            const name    = this.dataset.reviewer;
+            const reviews = JSON.parse(this.dataset.reviews);
+
+            document.getElementById('reviewerModalName').textContent = name;
+            document.getElementById('reviewerReportsCount').textContent =
+                reviews.length + ' review' + (reviews.length !== 1 ? 's' : '');
+
+            const tbody = document.getElementById('reviewerReportsBody');
+            tbody.innerHTML = '';
+            if (reviews.length === 0) {
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.setAttribute('colspan', '5');
+                td.className = 'text-center text-muted py-3';
+                td.textContent = 'No review records found.';
+                tr.appendChild(td);
+                tbody.appendChild(tr);
+            } else {
+                reviews.forEach(function (r) {
+                    const tr = document.createElement('tr');
+
+                    // Lab number cell
+                    const tdLab = document.createElement('td');
+                    tdLab.className = 'ps-3 fw-semibold';
+                    tdLab.textContent = r.lab_number;
+                    tr.appendChild(tdLab);
+
+                    // Analyst cell
+                    const tdAnalyst = document.createElement('td');
+                    tdAnalyst.textContent = r.analyst;
+                    tr.appendChild(tdAnalyst);
+
+                    // Test name cell
+                    const tdTest = document.createElement('td');
+                    tdTest.textContent = r.test_name;
+                    tr.appendChild(tdTest);
+
+                    // Action badge cell (controlled badge HTML, not user data)
+                    const tdAction = document.createElement('td');
+                    tdAction.className = 'text-center';
+                    tdAction.innerHTML = ACTION_BADGE[r.action] ||
+                        '<span class="badge bg-secondary"></span>';
+                    if (!ACTION_BADGE[r.action]) {
+                        tdAction.querySelector('span').textContent = r.action;
+                    }
+                    tr.appendChild(tdAction);
+
+                    // Date cell
+                    const tdDate = document.createElement('td');
+                    tdDate.textContent = r.reviewed_at;
+                    tr.appendChild(tdDate);
+
+                    tbody.appendChild(tr);
+                });
+            }
+
+            new bootstrap.Modal(document.getElementById('reviewerReportsModal')).show();
+        });
+    });
+}());
+</script>
+{% endif %}
+
+<!-- ── Analyst Preliminary Review Detail Modal ───────────────── -->
+<div class="modal fade" id="analystReviewsModal" tabindex="-1" aria-labelledby="analystReviewsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="analystReviewsModalLabel">
+                    <i class="bi bi-person me-2"></i>Preliminary Review History — <span id="analystModalName"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <table class="table table-sm table-bordered align-middle mb-0" id="analystReviewsTable">
+                    <thead class="table-dark">
+                        <tr>
+                            <th class="ps-3">Lab Number</th>
+                            <th>Reviewer</th>
+                            <th>Test</th>
+                            <th class="text-center">Action</th>
+                            <th>Date Reviewed</th>
+                        </tr>
+                    </thead>
+                    <tbody id="analystReviewsBody"></tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <span class="text-muted small me-auto" id="analystReviewsCount"></span>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Comment Category Drill-down Modal ─────────────────────── -->
+<div class="modal fade" id="commentCategoryModal" tabindex="-1" aria-labelledby="commentCategoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="commentCategoryModalLabel">
+                    <i class="bi bi-chat-left-text me-2"></i>Records for: <span id="categoryModalName"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <table class="table table-sm table-bordered align-middle mb-0" id="commentCategoryTable">
+                    <thead class="table-dark">
+                        <tr>
+                            <th class="ps-3">Lab Number</th>
+                            <th>Analyst</th>
+                            <th>Test</th>
+                            <th class="text-center">Action</th>
+                            <th>Date Reviewed</th>
+                        </tr>
+                    </thead>
+                    <tbody id="commentCategoryBody"></tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <span class="text-muted small me-auto" id="commentCategoryCount"></span>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const ACTION_BADGE_MAP = {
+        approved:     '<span class="badge bg-success">Approved</span>',
+        returned:     '<span class="badge bg-warning text-dark">Returned</span>',
+        not_accepted: '<span class="badge bg-danger">Not Accepted</span>',
+    };
+
+    function buildActionCell(action) {
+        const td = document.createElement('td');
+        td.className = 'text-center';
+        td.innerHTML = ACTION_BADGE_MAP[action] || '<span class="badge bg-secondary"></span>';
+        if (!ACTION_BADGE_MAP[action]) { td.querySelector('span').textContent = action; }
+        return td;
+    }
+
+    function buildReviewRows(reviews, colOrder) {
+        // colOrder: array of field names matching the table columns (excluding action)
+        // Supports {lab_number, analyst|reviewer, test_name, action, reviewed_at}
+        const fragment = document.createDocumentFragment();
+        if (reviews.length === 0) {
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.setAttribute('colspan', '5');
+            td.className = 'text-center text-muted py-3';
+            td.textContent = 'No review records found.';
+            tr.appendChild(td);
+            fragment.appendChild(tr);
+            return fragment;
+        }
+        reviews.forEach(function (r) {
+            const tr = document.createElement('tr');
+            colOrder.forEach(function (key, idx) {
+                if (key === 'action') {
+                    tr.appendChild(buildActionCell(r.action));
+                } else {
+                    const td = document.createElement('td');
+                    if (idx === 0) { td.className = 'ps-3 fw-semibold'; }
+                    td.textContent = r[key] || '—';
+                    tr.appendChild(td);
+                }
+            });
+            fragment.appendChild(tr);
+        });
+        return fragment;
+    }
+
+    // ── Analyst Performance Table click handler ─────────────────
+    document.querySelectorAll('.analyst-row').forEach(function (row) {
+        row.addEventListener('click', function () {
+            const name    = this.dataset.analyst;
+            const reviews = JSON.parse(this.dataset.reviews);
+
+            document.getElementById('analystModalName').textContent = name;
+            document.getElementById('analystReviewsCount').textContent =
+                reviews.length + ' review' + (reviews.length !== 1 ? 's' : '');
+
+            const tbody = document.getElementById('analystReviewsBody');
+            tbody.innerHTML = '';
+            tbody.appendChild(buildReviewRows(
+                reviews,
+                ['lab_number', 'reviewer', 'test_name', 'action', 'reviewed_at']
+            ));
+
+            new bootstrap.Modal(document.getElementById('analystReviewsModal')).show();
+        });
+    });
+
+    // ── Comment Category table click handler ────────────────────
+    function openCommentCategoryModal(row) {
+        const category = row.dataset.category;
+        const reviews  = JSON.parse(row.dataset.reviews);
+
+        document.querySelectorAll('.comment-cat-row.is-selected').forEach(function (r) {
+            r.classList.remove('is-selected');
+            r.removeAttribute('aria-pressed');
+        });
+        row.classList.add('is-selected');
+        row.setAttribute('aria-pressed', 'true');
+
+        document.getElementById('categoryModalName').textContent = category;
+        document.getElementById('commentCategoryCount').textContent =
+            reviews.length + ' record' + (reviews.length !== 1 ? 's' : '');
+
+        const tbody = document.getElementById('commentCategoryBody');
+        tbody.innerHTML = '';
+        tbody.appendChild(buildReviewRows(
+            reviews,
+            ['lab_number', 'analyst', 'test_name', 'action', 'reviewed_at']
+        ));
+
+        new bootstrap.Modal(document.getElementById('commentCategoryModal')).show();
+    }
+
+    document.querySelectorAll('.comment-cat-row').forEach(function (row) {
+        row.addEventListener('click', function () { openCommentCategoryModal(this); });
+        row.addEventListener('keydown', function (evt) {
+            if (evt.key === 'Enter' || evt.key === ' ' || evt.key === 'Spacebar') {
+                evt.preventDefault();
+                openCommentCategoryModal(this);
+            }
+        });
+    });
+}());
+</script>
+{% endblock %}
